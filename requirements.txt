@@ -1,0 +1,8 @@
+numpy>=1.21.0
+opencv-python>=4.6.0
+shapely>=2.0.0
+pyclipper>=1.3.0
+onnx>=1.14.0
+Pillow>=10.0.0
+# 默认启用 DirectML 支持 (AMD/Intel/NVIDIA)
+onnxruntime-directml>=1.16.0

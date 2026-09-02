@@ -1,6 +1,6 @@
-# MoliGod 自动化助手 — 人类化自动化设计文档
+# autoclick 自动化助手 — 人类化自动化设计文档
 
-> 本设计文档与代码一同维护，作为换机继续开发的设计依据。配套实现见 `WindowSpy/HumanClicker.cs`（人类化时序工具类）与 `MainWindow` 的"自动购买"页。
+> 本设计文档与代码一同维护，作为换机继续开发的设计依据。配套实现见 `WindowSpy/HumanClicker.cs`（人类化时序工具类）与 `MainWindow` 的"快捷操作"页。
 
 ---
 
@@ -11,7 +11,7 @@ Windows 桌面自动化工具（.NET 8 WPF + OpenCvSharp + PaddleOCR/ONNX Runtim
 - 窗口绑定（A/B 双窗口）
 - OCR 文字识别（PaddleOCR，支持 DirectML GPU 加速，Python 子进程通信）
 - 可视化步骤编排（点击 / OCR / 条件 / 循环 / 跳转 / 表达式）
-- 人类化自动化时序（"自动购买"页）
+- 人类化自动化时序（"快捷操作"页）
 
 ## 二、设计哲学（核心思路）
 
@@ -84,10 +84,12 @@ public static class HumanClicker
     public static void MaybeCheckRecords(int groupCount);    // 每 2~3 组触发, 停顿 3~6s, TODO移动
 
     // 配置
-    public static void SetBurstRange(int min, int max);
-    public static void SetJitterChance(double chance);
+    public static void Configure(HumanTimingParams p);       // 整体替换时序参数（见下）
+    public static void SetBurstRange(int min, int max);      // 便捷设置组数
 }
 ```
+
+所有时序参数收敛到 `HumanTimingParams`（均值/σ/下限/概率/幅度/组数/间隔），`HumanClicker` 内部持有一份并随 `Configure` 替换。默认值见下。
 
 参数默认值汇总：
 
@@ -104,48 +106,49 @@ public static class HumanClicker
 
 注意：`ClickAtScreen(x, y, dwell)` 内部把 dwell 用了两次（按前、按后各 Sleep 一次），传 50ms 实际点按周期约 100ms，符合"瞬间但有细微差距"。
 
-### 4.2 "自动购买"页（MainWindow）
+> 上表均值/下限/概率/幅度等均可通过「快捷操作」页的**高级设置**（`MainWindow.ApplyTimingConfig`）调整；σ（ln 域波动宽度）属分布形状，为调优默认、未暴露到 UI。组数 min/max 顶层可填，其余收在高级设置折叠面板。
 
-- **目标窗口**：A / B 下拉，复用现有绑定。
-- **弹窗识别区域**：`OverlaySelectWindow` 框选 → 存窗口相对坐标 `_autoBuyRect`。
-- **购买按钮位置**：`OverlayPickWindow` 点选 → 存窗口相对坐标 `_autoBuyPoint`。
-- **一组点击次数** min/max（默认 3 / 5）。
-- **目标点击次数**（0 = 不限，累计点击达目标自动停）。
-- **最长运行(分钟)**（0 = 不限，无人值守保险丝）。
-- **开始 / 停止** 按钮 + 状态文本。
+### 4.2 "快捷操作"页（MainWindow）
 
-### 4.3 自动购买主循环（状态机）
+- **检测窗口 + 选择检测区域**：`AutoBuyDetectCombo` 选窗口（A/B）→ `OverlaySelectWindow` 框选信号区 → 存窗口相对坐标 `_autoBuyRect`。
+- **操作窗口 + 选择操作位置**：`AutoBuyActCombo` 选窗口（A/B）→ `OverlayPickWindow` 取点 → 存窗口相对坐标 `_autoBuyPoint`。
+- 检测窗口与操作窗口**可相同可不同**，执行时分别用各自窗口 `GetRect` 换算屏幕坐标。
+- **一组操作次数** min/max（默认 3 / 5）、**目标次数**（0 = 不限）、**最长运行(分钟)**（0 = 不限）。
+- **高级设置**（`_AutoBuyAdvExpander`，默认折叠）：反应/连点/停留均值与下限、抖动概率与幅度、走神概率与时长、核查间隔与停顿、会话漂移幅度 → `ApplyTimingConfig` 读入 `HumanTimingParams` 并 `Configure`。
+- **开始执行 / 停止** 按钮 + 状态文本。
+
+### 4.3 快捷操作主循环（状态机）
 
 ```csharp
 while (!_stopAll)
 {
-    text = OCR(弹窗区域);                    // 数字模式
-    hasPopup = !string.IsNullOrEmpty(text);
+    text = OCR(detectHwnd, _autoBuyRect);        // 数字模式，检测窗口
+    hasSignal = !string.IsNullOrEmpty(text);
 
-    if (armed && hasPopup)                    // 弹窗出现且已武装 → 触发购买
+    if (armed && hasSignal)                       // 信号出现且已武装 → 触发
     {
         armed = false;
-        Sleep(HumanClicker.ReactionDelayMs());          // 反应延迟
-        ClickBurst(hwnd, 购买按钮屏幕坐标);              // 爆发 3~5 下
-        MaybeCheckRecords(1);                            // 每 2~3 组停顿核查
+        Sleep(HumanClicker.ReactionDelayMs());    // 反应延迟
+        ClickBurst(actHwnd, _autoBuyPoint 屏幕坐标); // 操作窗口上连点一组
+        MaybeCheckRecords(1);                     // 每 2~3 组停顿核查
     }
-    else if (!hasPopup) armed = true;         // 弹窗消失 → 重新武装（一次弹窗只触发一次）
+    else if (!hasSignal) armed = true;            // 信号消失 → 重新武装（一次只触发一次）
 
-    // 停止条件：目标点击次数 / 最长运行分钟 / _stopAll（防卡死、F12、停止按钮）
-    Sleep(HumanClicker.NextScanWaitMs());     // 扫描节奏，多数 0（靠 OCR 耗时）
+    // 停止条件：目标次数 / 最长运行分钟 / _stopAll（防卡死、F12、停止按钮）
+    Sleep(HumanClicker.NextScanWaitMs());         // 扫描节奏，多数 0（靠 OCR 耗时）
 }
 ```
 
 要点：
-- **一次弹窗只触发一次**：`armed` 状态保证"弹窗出现 → 爆发一次 → 等弹窗消失 → 重新武装"，不会对同一弹窗重复购买。
-- **组与组之间的等待**由市场/补货驱动（外部），不模拟。
-- 停止条件三类：目标点击次数、最长运行时长、`_stopAll`（防卡死 / F12 / 停止按钮）。
+- **一次信号只触发一次**：`armed` 状态保证"出现 → 操作一次 → 消失 → 重新武装"。
+- **组与组之间的等待**由外部（市场/补货）驱动，不模拟。
+- 停止条件三类：目标次数、最长运行时长、`_stopAll`（防卡死 / F12 / 停止按钮）。
 
 ### 4.4 与现有代码的对接点
 
 | 现有代码 | 位置 | 复用方式 |
 |---|---|---|
-| `_boundAHwnd` / `_boundBHwnd` | MainWindow.xaml.cs | 自动购买目标窗口 |
+| `_boundAHwnd` / `_boundBHwnd` | MainWindow.xaml.cs | 快捷操作目标窗口 |
 | `NativeMethods.CaptureWindow` / `GetRect` | NativeMethods.cs | 截图与坐标换算 |
 | `_ocr.OcrAsync` / 数字提取 | MainWindow.xaml.cs | 弹窗检测 |
 | `OverlaySelectWindow` / `OverlayPickWindow` | Overlay*.xaml.cs | 选区域 / 选按钮 |
@@ -163,8 +166,8 @@ while (!_stopAll)
    - 中等版（+100 行）：贝塞尔曲线路径 + 速度轮廓。
    - 完整版（再 +100 行）：过冲修正 + 2~5px 手抖噪声 + 距离越长轨迹越弯。
    - 注：轨迹模拟只对"事件流/回放观察"有效，对低级注入检测无效（后者认定为结构性无解）。
-3. **预设方案**（专注 / 正常 / 放松）：把 `HumanClicker` 的参数集（burst、reaction、走神概率、jitter）做成几套可切换的预设。
-4. **手动输入选项**：burst min/max、jitter 概率等已预留 `Set*` 接口，后续接到 UI。
+3. **预设方案**（专注 / 正常 / 放松）：把 `HumanTimingParams` 的整组参数做成几套可一键切换的预设（本轮已实现手动逐项配置，预设仅差一个"读取预设包"的壳）。
+4. **手动输入选项**：✅ 已实现——HumanClicker 改为 `HumanTimingParams` 配置化，快捷操作页「高级设置」可调整全部语义参数（σ 形状除外）。
 5. **多账号/窗口扩展**：当前单窗口 A/B；后续多开需把 `HumanClicker` 状态（tempo、AR 记忆、组计数）改为按窗口/账号隔离实例。
 
 ---
@@ -189,7 +192,7 @@ while (!_stopAll)
 ## 七、验证方法
 
 1. `dotnet build -c Release` 编译通过。
-2. 手动测试自动购买：
+2. 手动测试快捷操作：
    - 绑定窗口 A → 选择弹窗区域 → 选择购买按钮 → 填一组次数(3/5) → 目标点击次数(如 30) → 开始。
    - 观察：弹窗出现后约 0.5s 内开始爆发点击（3~5 下，偶发 ±1px 抖动）；弹窗消失后重新武装；每 2~3 组停顿 3~6s（核查占位）；累计点击达目标后自动停。
    - 急停测试：运行中按 F12 / 5 秒内右键 10 次 → 脚本立即停止。

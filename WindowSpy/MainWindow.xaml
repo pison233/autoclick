@@ -1,8 +1,21 @@
 <Window x:Class="WindowSpy.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="moligod自动化工具" Height="700" Width="1080" WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="600" MaxWidth="1080"
+        Title="autoclick" FontFamily="Microsoft YaHei" Height="700" Width="1080" WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="600" MaxWidth="1080"
         PreviewKeyDown="MainWindow_PreviewKeyDown">
+    <Window.Resources>
+        <Style TargetType="TabItem">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="12,7"/>
+        </Style>
+        <Style x:Key="NumBox" TargetType="TextBox">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <EventSetter Event="PreviewTextInput" Handler="NumberOnly_PreviewTextInput"/>
+        </Style>
+    </Window.Resources>
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -223,40 +236,88 @@
                     <Button x:Name="IdentifyKeyButton" Content="识别按键" Width="80" Height="32" Margin="8,0,0,0" Click="IdentifyKey_Click"/>
                 </WrapPanel>
             </TabItem>
-            <TabItem Header="自动购买">
+            <TabItem Header="快捷操作">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="8">
-                    <TextBlock Text="自动购买（人类化时序）：" FontWeight="Bold"/>
+                    <TextBlock Text="快捷操作（人类化时序）：" FontWeight="Bold"/>
                     <TextBlock Margin="0,4,0,0" Foreground="Gray" FontSize="11"
-                               Text="弹窗出现 → 反应延迟 → 爆发点击一组(默认3~5下) → 等弹窗消失再武装。累计点击达目标或到最长运行时间自动停止。"/>
+                               Text="在「检测窗口」上等数字/弹窗出现 → 像人一样反应 → 在「操作窗口」的目标上连点一组。检测与操作可分别绑定两个窗口，也可同一窗口。"/>
                     <WrapPanel Margin="0,8,0,0">
-                        <TextBlock Text="目标窗口" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <ComboBox x:Name="AutoBuyTargetCombo" Width="80" VerticalAlignment="Center">
+                        <TextBlock Text="检测窗口" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox x:Name="AutoBuyDetectCombo" Width="70" VerticalAlignment="Center">
                             <ComboBoxItem Content="A" IsSelected="True"/>
                             <ComboBoxItem Content="B"/>
                         </ComboBox>
+                        <Button Content="选择检测区域" Width="110" Height="32" Margin="8,0,0,0" Click="SelectAutoBuyRegion_Click" ToolTip="框出会弹出数字/价格的那块固定区域"/>
+                        <TextBlock x:Name="AutoBuyRegionText" VerticalAlignment="Center" Margin="8,0,0,0" Text="未选择" Foreground="Gray"/>
                     </WrapPanel>
                     <WrapPanel Margin="0,8,0,0">
-                        <Button Content="选择弹窗区域" Width="120" Height="32" Click="SelectAutoBuyRegion_Click"/>
-                        <TextBlock x:Name="AutoBuyRegionText" VerticalAlignment="Center" Margin="8,0,0,0" Text="未选择" Foreground="Gray"/>
-                        <Button Content="选择购买按钮" Width="120" Height="32" Margin="16,0,0,0" Click="SelectAutoBuyButton_Click"/>
+                        <TextBlock Text="操作窗口" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox x:Name="AutoBuyActCombo" Width="70" VerticalAlignment="Center">
+                            <ComboBoxItem Content="A"/>
+                            <ComboBoxItem Content="B" IsSelected="True"/>
+                        </ComboBox>
+                        <Button Content="选择操作按钮" Width="110" Height="32" Margin="8,0,0,0" Click="SelectAutoBuyButton_Click" ToolTip="在要点击的目标（如购买按钮）上点一下"/>
                         <TextBlock x:Name="AutoBuyButtonText" VerticalAlignment="Center" Margin="8,0,0,0" Text="未选择" Foreground="Gray"/>
                     </WrapPanel>
                     <WrapPanel Margin="0,8,0,0">
-                        <TextBlock Text="一组点击次数" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <TextBox x:Name="AutoBuyBurstMin" Width="40" Height="28" Text="3" VerticalContentAlignment="Center" ToolTip="一组爆发点击的最少次数"/>
+                        <TextBlock Text="一组操作次数" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBox x:Name="AutoBuyBurstMin" Style="{StaticResource NumBox}" Text="3" ToolTip="一组操作的最少次数"/>
                         <TextBlock Text="~" VerticalAlignment="Center" Margin="2,0"/>
-                        <TextBox x:Name="AutoBuyBurstMax" Width="40" Height="28" Text="5" VerticalContentAlignment="Center" ToolTip="一组爆发点击的最多次数"/>
-                        <TextBlock Text="目标点击次数(0=不限)" VerticalAlignment="Center" Margin="16,0,4,0" ToolTip="累计点击达到该值自动停止"/>
-                        <TextBox x:Name="AutoBuyTargetClicks" Width="60" Height="28" Text="0" VerticalContentAlignment="Center"/>
+                        <TextBox x:Name="AutoBuyBurstMax" Style="{StaticResource NumBox}" Text="5" ToolTip="一组操作的最多次数"/>
+                        <TextBlock Text="目标次数(0=不限)" VerticalAlignment="Center" Margin="16,0,4,0" ToolTip="累计操作达到该值自动停止"/>
+                        <TextBox x:Name="AutoBuyTargetClicks" Style="{StaticResource NumBox}" Width="56" Text="0"/>
                         <TextBlock Text="最长运行(分钟,0=不限)" VerticalAlignment="Center" Margin="16,0,4,0" ToolTip="无人值守保险丝：运行超时自动停止"/>
-                        <TextBox x:Name="AutoBuyMaxMinutes" Width="60" Height="28" Text="0" VerticalContentAlignment="Center"/>
+                        <TextBox x:Name="AutoBuyMaxMinutes" Style="{StaticResource NumBox}" Width="56" Text="0"/>
                     </WrapPanel>
+                    <Expander x:Name="AutoBuyAdvExpander" Header="高级设置（人类化时序参数）" IsExpanded="False" Margin="0,6,0,0">
+                        <ScrollViewer MaxHeight="168" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,6,0,0">
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="反应延迟均值(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="AdvReactMean" Style="{StaticResource NumBox}" Text="200"/>
+                                    <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvReactFloor" Style="{StaticResource NumBox}" Text="120"/>
+                                    <TextBlock Text="连点间隔均值(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvInterMean" Style="{StaticResource NumBox}" Text="200"/>
+                                    <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvInterFloor" Style="{StaticResource NumBox}" Text="110"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="按压停留(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="AdvDwellMean" Style="{StaticResource NumBox}" Text="50"/>
+                                    <TextBlock Text="落点抖动概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvJitterPct" Style="{StaticResource NumBox}" Text="12"/>
+                                    <TextBlock Text="抖动幅度(px)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvJitterPx" Style="{StaticResource NumBox}" Text="2"/>
+                                    <TextBlock Text="走神概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvDistractPct" Style="{StaticResource NumBox}" Text="6"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="走神时长(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="AdvDistractMs" Style="{StaticResource NumBox}" Text="4500"/>
+                                    <TextBlock Text="核查间隔(组)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvCheckMin" Style="{StaticResource NumBox}" Text="2"/>
+                                    <TextBlock Text="~" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBox x:Name="AdvCheckMax" Style="{StaticResource NumBox}" Text="3"/>
+                                    <TextBlock Text="核查停顿(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox x:Name="AdvCheckMs" Style="{StaticResource NumBox}" Text="4500"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="会话漂移幅度(%)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="AdvTempoPct" Style="{StaticResource NumBox}" Text="15"/>
+                                    <TextBlock Text="（分布波动宽度为调优默认，未在此暴露）" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="Gray" FontSize="11"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Expander>
                     <WrapPanel Margin="0,8,0,0">
-                        <Button x:Name="StartAutoBuyButton" Content="开始自动购买" Width="130" Height="32" Click="StartAutoBuy_Click"/>
+                        <Button x:Name="StartAutoBuyButton" Content="开始执行" Width="130" Height="32" Click="StartAutoBuy_Click"/>
                         <Button Content="停止" Width="90" Height="32" Margin="8,0,0,0" Click="StopAll_Click"/>
                         <TextBlock x:Name="AutoBuyStatusText" VerticalAlignment="Center" Margin="12,0,0,0" Text="未运行" Foreground="Gray"/>
                     </WrapPanel>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="步骤编辑">
                 <StackPanel Margin="8">
@@ -310,51 +371,11 @@
                     </WrapPanel>
                 </StackPanel>
             </TabItem>
-            <!-- 
+            <!--
             <TabItem Header="GPU环境">
                 ... (GPU环境相关内容已删除)
             </TabItem>
             -->
-            <TabItem Header="关于">
-                <StackPanel Margin="8">
-                    <TextBlock Text="MoliGod 自动化助手" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
-                    <TextBlock Text="版本：v0.2" Margin="0,0,0,4"/>
-                    <TextBlock Text="作者：moligod" Margin="0,0,0,4"/>
-                    <TextBlock Text="反馈群：856078436" Margin="0,0,0,4"/>
-                    
-                    <TextBlock Margin="0,0,0,4">
-                        <Run Text="赞助支持："/>
-                        <Hyperlink NavigateUri="https://ifdian.net/a/moligod" RequestNavigate="Hyperlink_RequestNavigate">
-                            https://ifdian.net/a/moligod
-                        </Hyperlink>
-                    </TextBlock>
-
-                    <TextBlock Margin="0,0,0,4">
-                        <Run Text="GitCode下载(国内)："/>
-                        <Hyperlink NavigateUri="https://gitcode.com/moligod/DF-AutomatedTool/releases/" RequestNavigate="Hyperlink_RequestNavigate">
-                            https://gitcode.com/moligod/DF-AutomatedTool/releases/
-                        </Hyperlink>
-                    </TextBlock>
-
-                    <TextBlock Margin="0,0,0,4">
-                        <Run Text="GitHub下载(国外)："/>
-                        <Hyperlink NavigateUri="https://github.com/moligod/DF-AutomatedTool/releases" RequestNavigate="Hyperlink_RequestNavigate">
-                            https://github.com/moligod/DF-AutomatedTool/releases
-                        </Hyperlink>
-                    </TextBlock>
-
-                    <TextBlock Text="常见问题:如果鼠标无法移动请使用管理员启动程序(默认管理员启动)" 
-                               FontSize="14" FontWeight="Bold" 
-                               HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,4"/>
-                    <TextBlock Text="识别技巧:识别的区域范围越小识别的速度越快(OCRTime识别速度)" 
-                               FontSize="14" FontWeight="Bold" 
-                               HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,4"/>
-                    <TextBlock Text="温馨提示:本工具为纯OCR识别点击,用前请记住,怕别用,用别怕!" 
-                               FontSize="14" FontWeight="Bold" 
-                               HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,4"/>
-                    <TextBlock Text="本软件开源免费仅供学习交流，请勿用于非法用途以及商业用途!" TextWrapping="Wrap" Foreground="Red" FontSize="20" FontWeight="Bold"/>
-                </StackPanel>
-            </TabItem>
         </TabControl>
 
         <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" Margin="8,0,0,0">

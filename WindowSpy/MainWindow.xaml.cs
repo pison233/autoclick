@@ -854,7 +854,7 @@ namespace WindowSpy
         }
 
         // ============================
-        // 自动购买（人类化时序）
+        // 快捷操作（人类化时序）
         // ============================
         private string CaptureAndOcrRegion(IntPtr hwnd, System.Drawing.Rectangle rect, bool numbersOnly)
         {
@@ -876,10 +876,41 @@ namespace WindowSpy
             return string.Join(" ", texts).Trim();
         }
 
+        private static int ClampInt(int v, int lo, int hi) => Math.Max(lo, Math.Min(hi, v));
+
+        // 从「高级设置」读取参数并应用到 HumanClicker
+        private void ApplyTimingConfig()
+        {
+            var p = new HumanTimingParams
+            {
+                ReactionMeanMs = ParseInt(AdvReactMean?.Text, (int)p0.ReactionMeanMs),
+                ReactionFloorMs = ParseInt(AdvReactFloor?.Text, p0.ReactionFloorMs),
+                InterClickMeanMs = ParseInt(AdvInterMean?.Text, (int)p0.InterClickMeanMs),
+                InterClickFloorMs = ParseInt(AdvInterFloor?.Text, p0.InterClickFloorMs),
+                DwellMeanMs = ParseInt(AdvDwellMean?.Text, (int)p0.DwellMeanMs),
+                JitterChance = ClampInt(ParseInt(AdvJitterPct?.Text, 12), 0, 100) / 100.0,
+                JitterLargePx = ClampInt(ParseInt(AdvJitterPx?.Text, p0.JitterLargePx), 1, 50),
+                DistractChance = ClampInt(ParseInt(AdvDistractPct?.Text, 6), 0, 100) / 100.0,
+                DistractMeanMs = ParseInt(AdvDistractMs?.Text, (int)p0.DistractMeanMs),
+                CheckMinGroups = ClampInt(ParseInt(AdvCheckMin?.Text, p0.CheckMinGroups), 1, 100),
+                CheckMaxGroups = ClampInt(ParseInt(AdvCheckMax?.Text, p0.CheckMaxGroups), 1, 100),
+                CheckPauseMeanMs = ParseInt(AdvCheckMs?.Text, (int)p0.CheckPauseMeanMs),
+            };
+            if (p.CheckMaxGroups < p.CheckMinGroups) p.CheckMaxGroups = p.CheckMinGroups;
+            double tempoPct = ClampInt(ParseInt(AdvTempoPct?.Text, 15), 1, 60);
+            p.TempoMin = 1 - tempoPct / 100.0;
+            p.TempoMax = 1 + tempoPct / 100.0;
+            HumanClicker.Configure(p);
+        }
+        private static readonly HumanTimingParams p0 = new HumanTimingParams();
+
+        private IntPtr DetectWindow() => AutoBuyDetectCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
+        private IntPtr ActWindow() => AutoBuyActCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
+
         private void SelectAutoBuyRegion_Click(object sender, RoutedEventArgs e)
         {
-            IntPtr hwnd = AutoBuyTargetCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
-            if (hwnd == IntPtr.Zero) { AppendLog("自动购买：请先绑定目标窗口"); return; }
+            IntPtr hwnd = DetectWindow();
+            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定检测窗口"); return; }
             var overlay = new OverlaySelectWindow();
             var ok = overlay.ShowDialog();
             if (ok != true) return;
@@ -889,18 +920,18 @@ namespace WindowSpy
             var interTop = Math.Max(wrect.Top, (int)sel.Top);
             var interRight = Math.Min(wrect.Right, (int)(sel.Left + sel.Width));
             var interBottom = Math.Min(wrect.Bottom, (int)(sel.Top + sel.Height));
-            if (interRight <= interLeft || interBottom <= interTop) { AppendLog("自动购买：选择区域不在目标窗口内"); return; }
+            if (interRight <= interLeft || interBottom <= interTop) { AppendLog("快捷操作：选择区域不在检测窗口内"); return; }
             _autoBuyRect = System.Drawing.Rectangle.FromLTRB(
                 interLeft - wrect.Left, interTop - wrect.Top,
                 interRight - wrect.Left, interBottom - wrect.Top);
             AutoBuyRegionText.Text = $"{_autoBuyRect.Value.Width}x{_autoBuyRect.Value.Height}";
-            AppendLog("自动购买：已选择弹窗识别区域");
+            AppendLog("快捷操作：已选择检测区域");
         }
 
         private void SelectAutoBuyButton_Click(object sender, RoutedEventArgs e)
         {
-            IntPtr hwnd = AutoBuyTargetCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
-            if (hwnd == IntPtr.Zero) { AppendLog("自动购买：请先绑定目标窗口"); return; }
+            IntPtr hwnd = ActWindow();
+            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定操作窗口"); return; }
             var picker = new OverlayPickWindow();
             var ok = picker.ShowDialog();
             if (ok == true)
@@ -909,26 +940,28 @@ namespace WindowSpy
                 int sx = (int)picker.ClickPoint.X;
                 int sy = (int)picker.ClickPoint.Y;
                 if (sx < wrect.Left || sy < wrect.Top || sx >= wrect.Right || sy >= wrect.Bottom)
-                { AppendLog("自动购买：购买按钮位置不在绑定窗口内"); return; }
+                { AppendLog("快捷操作：操作位置不在操作窗口内"); return; }
                 _autoBuyPoint = new System.Drawing.Point(sx - wrect.Left, sy - wrect.Top);
                 AutoBuyButtonText.Text = $"{_autoBuyPoint.Value.X},{_autoBuyPoint.Value.Y}";
-                AppendLog("自动购买：已选择购买按钮");
+                AppendLog("快捷操作：已选择操作位置");
             }
         }
 
         private async void StartAutoBuy_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning) { AppendLog("自动购买：已在运行"); return; }
-            IntPtr hwnd = AutoBuyTargetCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
-            if (hwnd == IntPtr.Zero) { AppendLog("自动购买：请先绑定目标窗口"); return; }
-            if (_autoBuyRect == null) { AppendLog("自动购买：请先选择弹窗区域"); return; }
-            if (_autoBuyPoint == null) { AppendLog("自动购买：请先选择购买按钮"); return; }
+            if (_isRunning) { AppendLog("快捷操作：已在运行"); return; }
+            IntPtr detectHwnd = DetectWindow();
+            IntPtr actHwnd = ActWindow();
+            if (detectHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定检测窗口"); return; }
+            if (actHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定操作窗口"); return; }
+            if (_autoBuyRect == null) { AppendLog("快捷操作：请先选择检测区域"); return; }
+            if (_autoBuyPoint == null) { AppendLog("快捷操作：请先选择操作位置"); return; }
 
-            int burstMin = ParseInt(AutoBuyBurstMin?.Text, 3);
-            int burstMax = ParseInt(AutoBuyBurstMax?.Text, 5);
+            int burstMin = ClampInt(ParseInt(AutoBuyBurstMin?.Text, 3), 1, 100);
+            int burstMax = ClampInt(ParseInt(AutoBuyBurstMax?.Text, 5), 1, 100);
             if (burstMax < burstMin) (burstMin, burstMax) = (burstMax, burstMin);
-            if (burstMin < 1) burstMin = 1;
             HumanClicker.SetBurstRange(burstMin, burstMax);
+            ApplyTimingConfig();
 
             int targetClicks = ParseInt(AutoBuyTargetClicks?.Text, 0);
             int maxMinutes = ParseInt(AutoBuyMaxMinutes?.Text, 0);
@@ -953,44 +986,44 @@ namespace WindowSpy
                     while (!_stopAll)
                     {
                         string text = "";
-                        try { text = CaptureAndOcrRegion(hwnd, rect, true); }
+                        try { text = CaptureAndOcrRegion(detectHwnd, rect, true); }
                         catch (Exception ex)
                         {
-                            Dispatcher.Invoke(() => AppendLog($"自动购买：OCR 出错 {ex.Message}"));
+                            Dispatcher.Invoke(() => AppendLog($"快捷操作：OCR 出错 {ex.Message}"));
                             Thread.Sleep(500);
                             continue;
                         }
-                        bool hasPopup = !string.IsNullOrEmpty(text);
+                        bool hasSignal = !string.IsNullOrEmpty(text);
 
-                        if (armed && hasPopup)
+                        if (armed && hasSignal)
                         {
                             armed = false;
                             Thread.Sleep(HumanClicker.ReactionDelayMs());
-                            var wrect = NativeMethods.GetRect(hwnd);
+                            var wrect = NativeMethods.GetRect(actHwnd);
                             var screenPt = new System.Drawing.Point(wrect.Left + point.X, wrect.Top + point.Y);
-                            int n = HumanClicker.ClickBurst(hwnd, screenPt);
+                            int n = HumanClicker.ClickBurst(actHwnd, screenPt);
                             totalClicks += n;
                             groupCount++;
                             HumanClicker.MaybeCheckRecords(1);
                             Dispatcher.Invoke(() =>
                             {
-                                AppendLog($"自动购买：检测到弹窗({text})，点击 {n} 次，累计 {totalClicks}");
-                                AutoBuyStatusText.Text = $"运行中：累计点击 {totalClicks}";
+                                AppendLog($"快捷操作：检测到({text})，操作 {n} 次，累计 {totalClicks}");
+                                AutoBuyStatusText.Text = $"运行中：累计 {totalClicks}";
                             });
                         }
-                        else if (!hasPopup)
+                        else if (!hasSignal)
                         {
-                            armed = true; // 弹窗消失 → 重新武装（一次弹窗只触发一次）
+                            armed = true; // 信号消失 → 重新武装（一次信号只触发一次）
                         }
 
                         if (targetClicks > 0 && totalClicks >= targetClicks)
                         {
-                            Dispatcher.Invoke(() => AppendLog($"自动购买：已达目标 {targetClicks} 次，停止"));
+                            Dispatcher.Invoke(() => AppendLog($"快捷操作：已达目标 {targetClicks} 次，停止"));
                             break;
                         }
                         if (maxMinutes > 0 && sw.Elapsed.TotalMinutes >= maxMinutes)
                         {
-                            Dispatcher.Invoke(() => AppendLog($"自动购买：已达最长运行 {maxMinutes} 分钟，停止"));
+                            Dispatcher.Invoke(() => AppendLog($"快捷操作：已达最长运行 {maxMinutes} 分钟，停止"));
                             break;
                         }
 
@@ -1003,11 +1036,11 @@ namespace WindowSpy
                     Dispatcher.Invoke(() =>
                     {
                         UnregisterStopHotkey();
-                        StartAutoBuyButton.Content = "开始自动购买";
+                        StartAutoBuyButton.Content = "开始执行";
                         AutoBuyStatusText.Text = _stopAll ? "已停止" : "已结束";
                     });
                     UninstallHook();
-                    Dispatcher.Invoke(() => AppendLog("自动购买结束"));
+                    Dispatcher.Invoke(() => AppendLog("快捷操作结束"));
                 }
             });
         }
@@ -1747,19 +1780,6 @@ namespace WindowSpy
             }
         }
 
-        private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
-                e.Handled = true;
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"无法打开链接: {ex.Message}");
-            }
-        }
- 
         private void RunScriptAll()
         {
             if (_steps.Count == 0)

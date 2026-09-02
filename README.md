@@ -59,11 +59,3 @@ OCR 后端两种方式：已打包 `Scripts/dist/onnx_ocr_cli/onnx_ocr_cli.exe`�
 **已实现**：HumanClicker 全参数配置化（`HumanTimingParams` + `Configure`）；「快捷操作」页双窗口检测/操作分离 + 高级设置折叠面板；步骤编辑器原功能；`.NET 8` 编译通过（本机 8.0.424）。
 
 **后续扩展（详见 DESIGN.md）**：交易记录核查的真实鼠标移动；鼠标轨迹模拟（轻量/中等/完整三档）；预设方案（专注/正常/放松）；多账号窗口隔离。
-
-## 上游与许可
-
-本项目为 [MoliGod 自动化助手 (DF-AutomatedTool)](https://github.com/moligod/DF-AutomatedTool)（作者 moligod，GPL）的 fork：保留原步骤编辑器全部功能，新增人类化快捷操作与品牌改名。原作者赞助：https://ifdian.net/a/moligod
-
-本软件开源免费仅供学习交流，**请勿用于非法用途以及商业用途！** 作者不对使用本软件产生的任何后果负责。
-
-**License**: GPL License

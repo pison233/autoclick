@@ -29,30 +29,30 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Vertical" Grid.Row="0" Grid.Column="0" Margin="0,0,0,8">
-            <TextBlock Text="绑定窗口(点击图标并且拖动至目标窗口)" FontWeight="Bold"
+            <TextBlock Text="绑定窗口(点击图标并且拖动至目标窗口)" FontSize="14" FontWeight="Bold"
                        ToolTip="点圆形图标后，将鼠标移到目标窗口上单击即可绑定该窗口；A/B 两个槽位可各绑一个窗口。"/>
             <StackPanel Orientation="Vertical" Margin="0,6,0,0">
                 <DockPanel Margin="0,0,0,6">
-                    <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
+                    <Border DockPanel.Dock="Left" Width="28" Height="28" Background="Transparent" BorderBrush="{x:Null}"
                             MouseLeftButtonDown="BindA_MouseLeftButtonDown">
-                        <Image Source="ck.png" Width="16" Height="16" Stretch="Uniform"
+                        <Image Source="ck.png" Width="20" Height="20" Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock DockPanel.Dock="Left" Text="窗口A：" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="BoundATitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
+                        <TextBlock DockPanel.Dock="Left" Text="窗口A：" FontSize="16" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="BoundATitle" FontSize="16" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                     </DockPanel>
                 </DockPanel>
                 <DockPanel>
-                    <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
+                    <Border DockPanel.Dock="Left" Width="28" Height="28" Background="Transparent" BorderBrush="{x:Null}"
                             MouseLeftButtonDown="BindB_MouseLeftButtonDown">
-                        <Image Source="ck.png" Width="16" Height="16" Stretch="Uniform"
+                        <Image Source="ck.png" Width="20" Height="20" Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock DockPanel.Dock="Left" Text="窗口B：" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="BoundBTitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
+                        <TextBlock DockPanel.Dock="Left" Text="窗口B：" FontSize="16" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="BoundBTitle" FontSize="16" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                     </DockPanel>
                 </DockPanel>
@@ -226,7 +226,7 @@
             <TabItem Header="快捷操作">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="8">
-                    <TextBlock Text="快捷操作（人类化时序）：" FontWeight="Bold"/>
+                    <TextBlock Text="快捷操作（人类化时序）：" FontSize="14" FontWeight="Bold"/>
                     <TextBlock Margin="0,4,0,0" Foreground="Gray" FontSize="11"
                                Text="在「检测窗口」上等数字/弹窗出现 → 像人一样反应 → 在「操作窗口」的目标上连点一组。检测与操作可分别绑定两个窗口，也可同一窗口。"/>
                     <WrapPanel Margin="0,8,0,0">
@@ -326,7 +326,7 @@
                         <CheckBox x:Name="UseGpuCheck" Content="启动GPU加速(可在输出日志测试识别速度后选择是否启动GPU加速)" IsChecked="False" VerticalAlignment="Center" Margin="8,0,0,0" ToolTip="勾选：尝试使用显卡加速(需要环境支持)；不勾选：强制使用CPU"/>
                     </WrapPanel>
                     <WrapPanel Margin="0,8,0,0">
-                        <TextBlock Text="定时任务：" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,8,0"/>
+                        <TextBlock Text="定时任务：" VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Margin="0,0,8,0"/>
                         
                         <!-- 启动定时设置 -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
@@ -371,7 +371,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="步骤队列（拖拽调整顺序，右键编辑，按住Ctrl可多选）：" FontWeight="Bold" />
+            <TextBlock Grid.Row="0" Text="步骤队列（拖拽调整顺序，右键编辑，按住Ctrl可多选）：" FontSize="14" FontWeight="Bold" />
             <Grid Grid.Row="1" Margin="0,2,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -403,7 +403,7 @@
         </Grid>
 
         <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Vertical" Margin="0,8,0,0">
-            <TextBlock Text="输出日志：" FontWeight="Bold"/>
+            <TextBlock Text="输出日志：" FontSize="14" FontWeight="Bold"/>
             <Grid>
                 <RichTextBox x:Name="OutputBox" Height="110" IsReadOnly="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas">
                     <FlowDocument>
@@ -414,7 +414,7 @@
             </Grid>
         </StackPanel>
         <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Vertical" Margin="8,8,0,0">
-            <TextBlock Text="表达式运算日志：" FontWeight="Bold"/>
+            <TextBlock Text="表达式运算日志：" FontSize="14" FontWeight="Bold"/>
             <TextBox x:Name="ExprLogBox" Height="110" IsReadOnly="True" TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"/>
         </StackPanel>

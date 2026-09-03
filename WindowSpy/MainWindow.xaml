@@ -29,7 +29,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Vertical" Grid.Row="0" Grid.Column="0" Margin="0,0,0,8">
-            <TextBlock Text="绑定窗口(点击并且拖动至目标窗口)" FontWeight="Bold"
+            <TextBlock Text="绑定窗口(点击图标并且拖动至目标窗口)" FontWeight="Bold"
                        ToolTip="点圆形图标后，将鼠标移到目标窗口上单击即可绑定该窗口；A/B 两个槽位可各绑一个窗口。"/>
             <StackPanel Orientation="Vertical" Margin="0,6,0,0">
                 <DockPanel Margin="0,0,0,6">

@@ -29,6 +29,7 @@
       </Content>
       
       <EmbeddedResource Include="check_gpu_env.py" />
+      <Content Include="ck.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   
   <Target Name="CopyBundledOcrExe" AfterTargets="Publish">

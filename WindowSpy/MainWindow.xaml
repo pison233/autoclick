@@ -32,10 +32,10 @@
             <TextBlock Text="绑定窗口(点击图标并且拖动至目标窗口)" FontSize="14" FontWeight="Bold"
                        ToolTip="点圆形图标后，将鼠标移到目标窗口上单击即可绑定该窗口；A/B 两个槽位可各绑一个窗口。"/>
             <StackPanel Orientation="Vertical" Margin="0,6,0,0">
-                <DockPanel Margin="0,0,0,6">
+                <DockPanel Margin="0,0,0,11">
                     <Border DockPanel.Dock="Left" Width="28" Height="28" Background="Transparent" BorderBrush="{x:Null}"
                             MouseLeftButtonDown="BindA_MouseLeftButtonDown">
-                        <Image Source="ck.png" Width="20" Height="20" Stretch="Uniform"
+                        <Image Source="ck.png" Width="24" Height="24" Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
@@ -47,7 +47,7 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Left" Width="28" Height="28" Background="Transparent" BorderBrush="{x:Null}"
                             MouseLeftButtonDown="BindB_MouseLeftButtonDown">
-                        <Image Source="ck.png" Width="20" Height="20" Stretch="Uniform"
+                        <Image Source="ck.png" Width="24" Height="24" Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">

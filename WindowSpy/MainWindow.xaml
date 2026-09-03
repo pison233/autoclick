@@ -29,7 +29,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Vertical" Grid.Row="0" Grid.Column="0" Margin="0,0,0,8">
-            <TextBlock Text="选择窗口与绑定：" FontWeight="Bold" />
+            <TextBlock Text="绑定窗口(点击并且拖动至目标窗口)" FontWeight="Bold"
+                       ToolTip="点圆形图标后，将鼠标移到目标窗口上单击即可绑定该窗口；A/B 两个槽位可各绑一个窗口。"/>
             <StackPanel Orientation="Vertical" Margin="0,6,0,0">
                 <DockPanel Margin="0,0,0,6">
                     <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
@@ -42,14 +43,11 @@
                             </Grid>
                         </Viewbox>
                     </Border>
-                    <StackPanel Orientation="Vertical" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="绑定A(拖到目标窗口)" />
-                        <DockPanel Margin="0,2,0,0">
-                            <TextBlock DockPanel.Dock="Left" Text="窗口A：" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="BoundATitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                        </DockPanel>
-                    </StackPanel>
+                    <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock DockPanel.Dock="Left" Text="窗口A：" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="BoundATitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                    </DockPanel>
                 </DockPanel>
                 <DockPanel>
                     <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
@@ -62,14 +60,11 @@
                             </Grid>
                         </Viewbox>
                     </Border>
-                    <StackPanel Orientation="Vertical" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="绑定B(拖到目标窗口)" />
-                        <DockPanel Margin="0,2,0,0">
-                            <TextBlock DockPanel.Dock="Left" Text="窗口B：" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="BoundBTitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                        </DockPanel>
-                    </StackPanel>
+                    <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock DockPanel.Dock="Left" Text="窗口B：" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="BoundBTitle" VerticalAlignment="Center" Text="" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                    </DockPanel>
                 </DockPanel>
             </StackPanel>
         </StackPanel>

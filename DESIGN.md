@@ -124,7 +124,9 @@ public static class HumanClicker
 - **测试识别**：框好区域点「测试识别」→ 后台 OCR 一次并显示结果，方便调条件。
 - **停止条件（勾选多选，任一达到即停）**：点击数 / 命中数（每轮每个检测满足并走真分支计 1）/ 轮数 / 运行分钟 / 任意检测勾「满足即停」。
 - **保存 / 加载流程**：JSON 存到 `SavedQueues\QuickFlows\`（子目录，避免被旧版队列下拉误列）。
-- **窗口可自由拉宽**（默认 1280×760，MinWidth 1024，无 MaxWidth）。
+- **窗口可自由拉宽**（默认 1360×820，MinWidth 1100，无 MaxWidth；右列队列宽 400）。
+- **界面结构（2026-09 重构）**：顶部 3 个主 Tab = 快捷操作（构建器）/ 复杂操作（原版整套，单页分组）/ 高级设置（时序模式 + 人类化参数 + 精细默认 + GPU）。右侧队列随主 Tab 切换：快捷操作→快捷流程列表；复杂操作/高级设置→原步骤队列。
+- **流程节点**：点击 / 检测(if) / 否则 / 结束 / 循环(开始·次数) / 循环结束 / 跳转(目标行)。点击节点自带精细延迟字段（高级设置选"精细延迟"模式时用固定 延迟±随机/偏移/停留；默认人类化模式走 HumanClicker）。
 - 高级设置（`_AutoBuyAdvExpander`，默认折叠）：反应/连点/停留等 → `ApplyTimingConfig` 读入 `HumanTimingParams` 并 `Configure`。
 
 ### 4.3 快捷操作执行引擎（if/else 解释器）
@@ -136,6 +138,8 @@ public static class HumanClicker
 - 真分支/否则分支的**首个点击前** `Sleep(ReactionDelayMs())`（人类反应）；其余点击间隔 `InterClickMs()`；组内连点由 `ClickBurst(hwnd, center, count)` 自带抖动/停留/间隔。
 - 每轮结束 `NextScanWaitMs()` 定节奏（多数 0，靠 OCR 耗时撑起）；有点击的轮调 `MaybeCheckRecords(1)`。
 - 停止：`_stopAll`（F12 / 右键×10 / 停止按钮）每轮轮询；点击数 / 命中数 / 轮数 / 分钟达到即停；检测勾「满足即停」当场停。
+- **循环/跳转**：LoopStart 压栈(次数)，LoopEnd 递减回跳（到达次数出栈继续）；Jump 直接置 `i=目标行`，带每轮 20 万条指令的死循环保护。
+- **时序模式全局二选一**（高级设置）：人类化 → `HumanClicker`（反应/间隔/抖动/停留）；精细延迟 → 用各点击节点自己的 `DelayMs±RandomDelay / RandomX/Y / DwellMs±RandomDwell`，等效原版固定延迟步。
 
 ### 4.4 与现有代码的对接点
 

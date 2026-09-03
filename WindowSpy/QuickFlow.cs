@@ -6,8 +6,8 @@ using System.Text;
 
 namespace WindowSpy
 {
-    // 流程节点类型：点击 / 检测(if) / 否则 / 结束
-    public enum QuickNodeType { Click, If, Else, End }
+    // 流程节点类型：点击 / 检测(if) / 否则 / 结束 / 循环(开始) / 循环结束 / 跳转
+    public enum QuickNodeType { Click, If, Else, End, LoopStart, LoopEnd, Jump }
 
     // 单条子条件种类（同一检测区域上判断）
     public enum CheckConditionKind { HasContent, IsEmpty, NumCompare, TextMatch }
@@ -52,12 +52,23 @@ namespace WindowSpy
         public Point Point;
         public int RepeatMin = 1;
         public int RepeatMax = 1;
+        // 精细时序（高级设置选“精细延迟”时生效；人类化时忽略）
+        public int DelayMs = 300;
+        public int RandomDelay = 0;
+        public int DwellMs = 100;
+        public int RandomDwell = 0;
+        public int RandomX = 0;
+        public int RandomY = 0;
 
         // --- 检测(if)节点 ---
         public Rectangle Rect;                                    // 检测区域
         public List<FlowCondition> Conditions = new();            // 同区域的多条子条件
         public CheckTriggerMode TriggerMode = CheckTriggerMode.EveryRound;   // 默认每轮判断(标准 if/else)
         public bool StopWhenTrue;                                 // 满足即停（停止信号）
+
+        // --- 循环(开始) / 跳转 ---
+        public int LoopCount = 3;                                 // LoopStart 内循环次数
+        public int JumpTarget = -1;                               // Jump 目标行（0 基下标，-1=未设）
 
         public QuickFlowNode Clone()
         {
@@ -68,9 +79,17 @@ namespace WindowSpy
                 Point = Point,
                 RepeatMin = RepeatMin,
                 RepeatMax = RepeatMax,
+                DelayMs = DelayMs,
+                RandomDelay = RandomDelay,
+                DwellMs = DwellMs,
+                RandomDwell = RandomDwell,
+                RandomX = RandomX,
+                RandomY = RandomY,
                 Rect = Rect,
                 TriggerMode = TriggerMode,
                 StopWhenTrue = StopWhenTrue,
+                LoopCount = LoopCount,
+                JumpTarget = JumpTarget,
             };
             foreach (var f in Conditions) c.Conditions.Add(f.Clone());
             return c;
@@ -226,18 +245,26 @@ namespace WindowSpy
 
     public class QuickFlowNodeDto
     {
-        public string Type { get; set; } = "Click";   // "Click"|"If"|"Else"|"End"
+        public string Type { get; set; } = "Click";   // "Click"|"If"|"Else"|"End"|"LoopStart"|"LoopEnd"|"Jump"
         public string Target { get; set; } = "A";
         public int PointX { get; set; }
         public int PointY { get; set; }
         public int RepeatMin { get; set; } = 1;
         public int RepeatMax { get; set; } = 1;
+        public int DelayMs { get; set; } = 300;
+        public int RandomDelay { get; set; }
+        public int DwellMs { get; set; } = 100;
+        public int RandomDwell { get; set; }
+        public int RandomX { get; set; }
+        public int RandomY { get; set; }
         public int RectX { get; set; }
         public int RectY { get; set; }
         public int RectW { get; set; }
         public int RectH { get; set; }
         public string TriggerMode { get; set; } = "EveryRound";
         public bool StopWhenTrue { get; set; }
+        public int LoopCount { get; set; } = 3;
+        public int JumpTarget { get; set; } = -1;
         public List<QuickFlowCondDto> Conditions { get; set; } = new();
     }
 
@@ -304,12 +331,20 @@ namespace WindowSpy
                 PointY = n.Point.Y,
                 RepeatMin = n.RepeatMin,
                 RepeatMax = n.RepeatMax,
+                DelayMs = n.DelayMs,
+                RandomDelay = n.RandomDelay,
+                DwellMs = n.DwellMs,
+                RandomDwell = n.RandomDwell,
+                RandomX = n.RandomX,
+                RandomY = n.RandomY,
                 RectX = n.Rect.X,
                 RectY = n.Rect.Y,
                 RectW = n.Rect.Width,
                 RectH = n.Rect.Height,
                 TriggerMode = n.TriggerMode.ToString(),
                 StopWhenTrue = n.StopWhenTrue,
+                LoopCount = n.LoopCount,
+                JumpTarget = n.JumpTarget,
             };
             foreach (var c in n.Conditions) d.Conditions.Add(CondToDto(c));
             return d;
@@ -326,8 +361,16 @@ namespace WindowSpy
             };
             n.RepeatMin = Math.Max(1, d.RepeatMin);
             n.RepeatMax = Math.Max(n.RepeatMin, d.RepeatMax);
+            n.DelayMs = Math.Max(0, d.DelayMs);
+            n.RandomDelay = Math.Max(0, d.RandomDelay);
+            n.DwellMs = Math.Max(0, d.DwellMs);
+            n.RandomDwell = Math.Max(0, d.RandomDwell);
+            n.RandomX = Math.Max(0, d.RandomX);
+            n.RandomY = Math.Max(0, d.RandomY);
             if (Enum.TryParse<CheckTriggerMode>(d.TriggerMode, true, out var tm)) n.TriggerMode = tm;
             n.StopWhenTrue = d.StopWhenTrue;
+            n.LoopCount = Math.Max(1, d.LoopCount);
+            n.JumpTarget = d.JumpTarget;
             if (d.Conditions != null)
                 foreach (var c in d.Conditions) n.Conditions.Add(CondFromDto(c));
             return n;

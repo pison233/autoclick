@@ -1,7 +1,7 @@
 <Window x:Class="WindowSpy.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="autoclick" FontFamily="Microsoft YaHei" Height="760" Width="1280" WindowStartupLocation="CenterScreen" MinWidth="1024" MinHeight="640"
+        Title="autoclick" FontFamily="Microsoft YaHei" Height="820" Width="1360" WindowStartupLocation="CenterScreen" MinWidth="1100" MinHeight="640"
         PreviewKeyDown="MainWindow_PreviewKeyDown">
     <Window.Resources>
         <Style TargetType="TabItem">
@@ -19,7 +19,7 @@
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="400"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -28,6 +28,7 @@
             <RowDefinition Height="140"/>
         </Grid.RowDefinitions>
 
+        <!-- 绑定窗口 -->
         <StackPanel Orientation="Vertical" Grid.Row="0" Grid.Column="0" Margin="0,0,0,8">
             <TextBlock Text="绑定窗口(点击图标并且拖动至目标窗口)" FontSize="14" FontWeight="Bold"
                        ToolTip="点圆形图标后，将鼠标移到目标窗口上单击即可绑定该窗口；A/B 两个槽位可各绑一个窗口。"/>
@@ -60,213 +61,94 @@
         </StackPanel>
 
         <StackPanel Grid.Row="1" Grid.Column="0" VerticalAlignment="Center">
-            <TextBlock x:Name="UsageNoteText" Text="步骤队列使用事项：(默认不写)"  
+            <TextBlock x:Name="UsageNoteText" Text="步骤队列使用事项：(默认不写)"
                        Visibility="Collapsed"
                        Foreground="Gray" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="10,0,10,0"/>
         </StackPanel>
 
-        <TabControl Grid.Row="2" Grid.Column="0" Margin="0,8,0,0">
-            <TabItem Header="A操作">
-                <StackPanel Margin="8">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="A识别结果：" />
-                            <TextBlock x:Name="OcrResultTextA" Width="220" VerticalAlignment="Center" Text="" />
-                        </StackPanel>
-                        <StackPanel Margin="0,8,0,0">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Button x:Name="SelectAreaButtonA" Content="选择A识别区域" Width="120" Height="32" Margin="0,0,8,0" Click="SelectAreaButtonA_Click"/>
-                                <Button Content="添加A识别步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddOcrStepA_Click"/>
-                                <Button x:Name="ShotButtonA" Content="识别A并保存" Width="120" Height="32" Margin="0,0,8,0" Click="ShotButtonA_Click"/>
-                                <CheckBox x:Name="OcrAOnlyNums" Content="只识别数字" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="True"/>
-                                <CheckBox x:Name="ReuseOcrRoiCacheCheck" Content="ROI未变化复用OCR结果" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="开启后：识别区域画面判定未变化时，将直接复用上次OCR文本以提速；仍可能存在极小概率漏判变化，建议仅在画面变化明显的场景使用"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Button x:Name="SelectClickPosA" Content="选择A点击位置" Width="120" Height="32" Margin="0,0,8,0" Click="SelectClickPosA_Click"/>
-                                <Button Content="添加A点击步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddClickStepA_Click"/>
-                                <Button x:Name="ClickSelectedPosA" Content="点击A选择位置" Width="120" Height="32" Margin="0,0,8,0" Click="ClickSelectedPosA_Click"/>
-                                <Button Content="添加置顶A步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddBringFrontA_Click"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="鼠标随机偏移(px)"/>
-                                <TextBox x:Name="RandomXA" Width="50" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置点击位置的随机偏差(像素)。例如填10，则X坐标在 ±10 范围内波动"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="x"/>
-                                <TextBox x:Name="RandomYA" Width="50" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置点击位置的随机偏差(像素)。例如填10，则Y坐标在 ±10 范围内波动"/>
-                                <TextBlock Margin="16,0,4,0" VerticalAlignment="Center" Text="延迟(ms)"/>
-                                <TextBox x:Name="DelayMsA" Width="50" Height="28" VerticalAlignment="Center" Text="300" VerticalContentAlignment="Center" ToolTip="执行此步骤前的固定延迟时间(ms)"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
-                                <TextBox x:Name="RandomDelayA" Width="40" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置随机偏差范围，例如填50表示在基准值上下50ms内波动 (±50)"/>
-                                <TextBlock Margin="16,0,4,0" VerticalAlignment="Center" Text="停留(ms)"/>
-                                <TextBox x:Name="DwellMsA" Width="50" Height="28" VerticalAlignment="Center" Text="100" VerticalContentAlignment="Center" ToolTip="鼠标点击后按住停留的时间(ms)"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
-                                <TextBox x:Name="RandomDwellA" Width="40" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置随机偏差范围，例如填50表示在基准值上下50ms内波动 (±50)"/>
-                            </StackPanel>
-                        </StackPanel>
+        <!-- ============ 右侧队列（随主 Tab 切换：快捷流程 / 复杂步骤队列） ============ -->
+        <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" Margin="8,0,0,0">
+            <!-- 快捷流程面板 -->
+            <DockPanel x:Name="QueueFlowPanel">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="快捷流程：" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Button x:Name="SaveFlowButton" Content="保存流程" Width="84" Height="30" Margin="8,0,0,0" Click="SaveFlow_Click"/>
+                    <Button x:Name="LoadFlowButton" Content="加载流程" Width="84" Height="30" Margin="6,0,0,0" Click="LoadFlow_Click"/>
                 </StackPanel>
-            </TabItem>
-            <TabItem Header="B操作">
-                <StackPanel Margin="8">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="B识别结果：" />
-                            <TextBlock x:Name="OcrResultTextB" Width="220" VerticalAlignment="Center" Text="" />
-                        </StackPanel>
-                        <StackPanel Margin="0,8,0,0">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Button x:Name="SelectAreaButtonB" Content="选择B识别区域" Width="120" Height="32" Margin="0,0,8,0" Click="SelectAreaButtonB_Click"/>
-                                <Button Content="添加B识别步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddOcrStepB_Click"/>
-                                <Button x:Name="ShotButtonB" Content="识别B并保存" Width="120" Height="32" Margin="0,0,8,0" Click="ShotButtonB_Click"/>
-                                <CheckBox x:Name="OcrBOnlyNums" Content="只识别数字" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="True"/>
-                                <CheckBox Content="ROI未变化复用OCR结果" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="{Binding ElementName=ReuseOcrRoiCacheCheck, Path=IsChecked, Mode=TwoWay}" ToolTip="开启后：识别区域画面判定未变化时，将直接复用上次OCR文本以提速；与A操作共用此设置"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Button x:Name="SelectClickPosB" Content="选择B点击位置" Width="120" Height="32" Margin="0,0,8,0" Click="SelectClickPosB_Click"/>
-                                <Button Content="添加B点击步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddClickStepB_Click"/>
-                                <Button x:Name="ClickSelectedPosB" Content="点击B选择位置" Width="120" Height="32" Margin="0,0,8,0" Click="ClickSelectedPosB_Click"/>
-                                <Button Content="添加置顶B步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddBringFrontB_Click"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="鼠标随机偏移(px)"/>
-                                <TextBox x:Name="RandomXB" Width="50" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置点击位置的随机偏差(像素)。例如填10，则X坐标在 ±10 范围内波动"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="x"/>
-                                <TextBox x:Name="RandomYB" Width="50" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置点击位置的随机偏差(像素)。例如填10，则Y坐标在 ±10 范围内波动"/>
-                                <TextBlock Margin="16,0,4,0" VerticalAlignment="Center" Text="延迟(ms)"/>
-                                <TextBox x:Name="DelayMsB" Width="50" Height="28" VerticalAlignment="Center" Text="300" VerticalContentAlignment="Center" ToolTip="执行此步骤前的固定延迟时间(ms)"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
-                                <TextBox x:Name="RandomDelayB" Width="40" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置随机偏差范围，例如填50表示在基准值上下50ms内波动 (±50)"/>
-                                <TextBlock Margin="16,0,4,0" VerticalAlignment="Center" Text="停留(ms)"/>
-                                <TextBox x:Name="DwellMsB" Width="50" Height="28" VerticalAlignment="Center" Text="100" VerticalContentAlignment="Center" ToolTip="鼠标点击后按住停留的时间(ms)"/>
-                                <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
-                                <TextBox x:Name="RandomDwellB" Width="40" Height="28" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="设置随机偏差范围，例如填50表示在基准值上下50ms内波动 (±50)"/>
-                            </StackPanel>
-                        </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button x:Name="MoveUpButton" Content="上移" Width="56" Height="28" Click="MoveFlowUp_Click" IsEnabled="False"/>
+                    <Button x:Name="MoveDownButton" Content="下移" Width="56" Height="28" Margin="6,0,0,0" Click="MoveFlowDown_Click" IsEnabled="False"/>
+                    <Button x:Name="DeleteNodeButton" Content="删除选中" Width="80" Height="28" Margin="6,0,0,0" Click="DeleteFlowNode_Click" IsEnabled="False"/>
                 </StackPanel>
-            </TabItem>
-            <TabItem Header="条件">
-                <StackPanel Margin="8">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,4,0" VerticalAlignment="Center" Text="表达式条件"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ExprBox" Height="28" VerticalAlignment="Center" HorizontalAlignment="Stretch" MinWidth="240" VerticalContentAlignment="Center" GotFocus="ExprBox_GotFocus" LostFocus="ExprBox_LostFocus">
-                            <TextBox.ToolTip>
-                                <TextBlock>
-                                    支持运算符: ==, !=, >, >=, &lt;, &lt;=, AND(&amp;&amp;), OR(||)<LineBreak/>
-                                    示例: A1 == '文本' OR B1 > 100<LineBreak/>
-                                    变量说明: A1, B1 等为保存的变量名，文本需用引号包裹
-                                </TextBlock>
-                            </TextBox.ToolTip>
-                        </TextBox>
-                        
-                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ExprHelpText" Visibility="Collapsed" Margin="0,2,0,0" Foreground="Gray" FontSize="11">
-                            支持运算符: ==, !=, >, >=, &lt;, &lt;=, and (&amp;&amp;), or (||)<LineBreak/>
-                            a1 == "中文" 或 b1 > 100
-                        </TextBlock>
-                        <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button Content="添加 If" Width="80" Height="28" Click="AddIfStep_Click" ToolTip="添加 If 开始块 (使用上方表达式)"/>
-                            <Button Content="添加 ElseIf" Width="80" Height="28" Margin="8,0,0,0" Click="AddElseIfStep_Click" ToolTip="添加 ElseIf 块 (使用上方表达式)"/>
-                            <Button Content="添加 Else" Width="80" Height="28" Margin="8,0,0,0" Click="AddElseStep_Click" ToolTip="添加 Else 块 (无条件)"/>
-                            <Button Content="添加结束if" Width="80" Height="28" Margin="8,0,0,0" Click="AddEndIfStep_Click" ToolTip="添加 EndIf 结束块"/>
-                            <Button Content="跳出If/Else" Width="90" Height="28" Margin="8,0,0,0" Click="AddBreakBlock_Click" ToolTip="跳出当前的 If/ElseIf/Else 块 (跳转到 EndIf 后)"/>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </TabItem>
-            <TabItem Header="循环">
-                <WrapPanel Margin="8">
-                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="内循环次数"/>
-                    <TextBox x:Name="LoopInnerCount" Width="60" Height="28" VerticalAlignment="Center" Text="3" VerticalContentAlignment="Center" ToolTip="添加'循环开始'步骤时默认使用的循环次数（控制局部步骤块的重复）"/>
-                    <Button Content="添加循环开始" Width="110" Height="32" Margin="8,0,0,0" Click="AddLoopStart_Click" ToolTip="添加一个循环开始步骤，使用左侧设置的'内循环次数'"/>
-                    <Button Content="添加循环结束" Width="110" Height="32" Margin="8,0,0,0" Click="AddLoopEnd_Click" ToolTip="添加一个循环结束步骤，与最近的'循环开始'配对"/>
-                    <Button Content="跳出循环" Width="90" Height="32" Margin="8,0,0,0" Click="AddBreakLoop_Click" ToolTip="跳出最近的一层循环"/>
-                    <Button Content="跳入下次循环" Width="110" Height="32" Margin="8,0,0,0" Click="AddContinue_Click" ToolTip="跳过本次循环剩余部分，进入下一次迭代"/>
-                </WrapPanel>
-            </TabItem>
-            <TabItem Header="跳转">
-                <WrapPanel Margin="8">
-                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="标签名称"/>
-                    <TextBox x:Name="LabelBox" Width="120" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" ToolTip="标签名称"/>
-                    <Button Content="添加标签" Width="90" Height="32" Margin="8,0,0,0" Click="AddLabel_Click" ToolTip="添加一个跳转标签 (名称使用左侧标签框)"/>
-                    <Button Content="添加跳转" Width="90" Height="32" Margin="8,0,0,0" Click="AddGoto_Click" ToolTip="无条件跳转到指定标签 (名称使用左侧标签框)"/>
-                </WrapPanel>
-            </TabItem>
-            <TabItem Header="注释">
-                <WrapPanel Margin="8">
-                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="注释内容"/>
-                    <TextBox x:Name="CommentText" Width="220" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" ToolTip="输入对步骤队列的说明或备注"/>
-                    <Button Content="添加注释步骤" Width="100" Height="32" Margin="8,0,0,0" Click="AddCommentStep_Click"/>
-                </WrapPanel>
-            </TabItem>
-            <TabItem Header="保存">
-                <WrapPanel Margin="8">
-                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="保存变量"/>
-                    <TextBox x:Name="SaveKey" Width="120" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" ToolTip="将结果保存到的变量名称，例如：myVal"/>
-                    <Button Content="添加保存A结果" Width="120" Height="32" Margin="8,0,0,0" Click="AddSaveA_Click"/>
-                    <Button Content="添加保存B结果" Width="120" Height="32" Margin="8,0,0,0" Click="AddSaveB_Click"/>
-                </WrapPanel>
-            </TabItem>
-            <TabItem Header="按键">
-                <WrapPanel Margin="8">
-                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="按键名称"/>
-                    <TextBox x:Name="KeyPressBox" Width="100" Height="28" VerticalAlignment="Center" Text="" VerticalContentAlignment="Center" ToolTip="输入按键名称(如Enter, F1, A)"/>
-                    <TextBlock Margin="12,0,4,0" VerticalAlignment="Center" Text="按压(ms)"/>
-                    <TextBox x:Name="KeyPressDwell" Width="60" Height="28" VerticalAlignment="Center" Text="50" VerticalContentAlignment="Center" ToolTip="按键按下的持续时间(ms)"/>
-                    <Button Content="添加按键步骤" Width="100" Height="32" Margin="8,0,0,0" Click="AddKeyPressStep_Click"/>
-                    <Button x:Name="IdentifyKeyButton" Content="识别按键" Width="80" Height="32" Margin="8,0,0,0" Click="IdentifyKey_Click"/>
-                </WrapPanel>
-            </TabItem>
+                <TextBlock DockPanel.Dock="Top" Text="节点按 检测(if)/否则/结束/循环/循环结束 的缩进表示层级；选中后在左侧快捷操作页编辑。" FontSize="11" Foreground="Gray" TextWrapping="Wrap"/>
+                <ListBox x:Name="QuickFlowList" SelectionChanged="QuickFlowList_SelectionChanged" FontSize="12"/>
+            </DockPanel>
+
+            <!-- 复杂操作步骤队列面板 -->
+            <DockPanel x:Name="QueueStepsPanel" Visibility="Collapsed">
+                <TextBlock DockPanel.Dock="Top" Text="步骤队列（拖拽调整顺序，右键编辑，按住Ctrl可多选）：" FontSize="14" FontWeight="Bold" />
+                <Grid DockPanel.Dock="Top" Margin="0,2,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="QuickLoadCombo" Grid.Column="0" Margin="0,0,4,0"
+                              SelectionChanged="QuickLoadCombo_SelectionChanged"
+                              IsEditable="False" ToolTip="选择保存的队列文件以快速加载"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="刷新" Click="RefreshScripts_Click" Padding="8,0" Margin="0,0,4,0"/>
+                        <Button Content="目录" Click="OpenScriptDir_Click" Padding="8,0"/>
+                    </StackPanel>
+                </Grid>
+                <ListBox x:Name="StepsList" AllowDrop="True" SelectionMode="Extended"
+                         PreviewMouseLeftButtonDown="StepsList_PreviewMouseLeftButtonDown"
+                         PreviewMouseLeftButtonUp="StepsList_PreviewMouseLeftButtonUp"
+                         Drop="StepsList_Drop"
+                         DragOver="StepsList_DragOver"
+                         MouseMove="StepsList_MouseMove">
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="编辑" Click="MenuItem_Edit_Click"/>
+                            <MenuItem Header="复制步骤" Click="MenuItem_Duplicate_Click"/>
+                            <MenuItem Header="删除" Click="MenuItem_Delete_Click"/>
+                            <MenuItem Header="执行所选步骤" Click="MenuItem_ExecuteSelected_Click"/>
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                </ListBox>
+            </DockPanel>
+        </Grid>
+
+        <!-- ============ 主 Tab ============ -->
+        <TabControl x:Name="MainTabs" Grid.Row="2" Grid.Column="0" Margin="0,8,0,0"
+                    SelectionChanged="MainTabs_SelectionChanged">
+
+            <!-- ========== Tab1 快捷操作 ========== -->
             <TabItem Header="快捷操作">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*" MinHeight="140"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*" MinHeight="120"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="430"/>
-                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="Gray" FontSize="11"
+                               Text="流程 = 一排节点从上到下（缩进=if/else 或 循环 层级），整轮跑完自动从头循环。检测(if)：框一个区域写多条 且/或 子条件；满足→真分支、不满足→否则。用 循环/循环结束 做内循环；用 跳转 跳到指定行。F12 / 5秒内右键10次 可急停。"/>
+                    <WrapPanel Grid.Row="1" Margin="0,6,0,0">
+                        <Button x:Name="AddFlowIfButton" Content="＋检测(if)" Width="90" Height="32" Click="AddFlowIf_Click" ToolTip="插入检测(if)节点：框区域写条件，满足走真分支直到 否则/结束"/>
+                        <Button x:Name="AddFlowClickButton" Content="＋点击" Width="72" Height="32" Margin="6,0,0,0" Click="AddFlowClick_Click" ToolTip="插入点击节点（某窗口某点连点N下）"/>
+                        <Button x:Name="AddFlowElseButton" Content="＋否则" Width="66" Height="32" Margin="6,0,0,0" Click="AddFlowElse_Click" ToolTip="插入否则(else)分支开始"/>
+                        <Button x:Name="AddFlowEndButton" Content="＋结束" Width="66" Height="32" Margin="6,0,0,0" Click="AddFlowEnd_Click" ToolTip="插入结束(end)：关闭最近一个未配对的 if/否则"/>
+                        <Button x:Name="AddFlowLoopButton" Content="＋循环" Width="66" Height="32" Margin="6,0,0,0" Click="AddFlowLoop_Click" ToolTip="插入内循环开始（默认3次，右侧改）"/>
+                        <Button x:Name="AddFlowLoopEndButton" Content="＋循环结束" Width="92" Height="32" Margin="6,0,0,0" Click="AddFlowLoopEnd_Click" ToolTip="插入循环结束：关闭最近一个未配对的 循环(开始)"/>
+                        <Button x:Name="AddFlowJumpButton" Content="＋跳转" Width="70" Height="32" Margin="6,0,0,0" Click="AddFlowJump_Click" ToolTip="插入跳转节点：右侧选要跳到的行"/>
+                    </WrapPanel>
 
-                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                               Text="流程 = 一排节点从上到下（缩进表示 if/else 层级），整轮跑完自动从头循环。检测(if)：框一个区域并写多条子条件（同区域、用 且/或 组合）——满足走 真 分支，不满足走 否则；无否则则跳过。F12 / 5秒内右键10次可急停。"
-                               Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
-
-                    <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
-                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                            <Button x:Name="AddFlowClickButton" Content="＋点击" Width="78" Height="32" Click="AddFlowClick_Click" ToolTip="插入点击节点（某窗口某点连点N下）"/>
-                            <Button x:Name="AddFlowIfButton" Content="＋检测(if)" Width="96" Height="32" Margin="6,0,0,0" Click="AddFlowIf_Click" ToolTip="插入检测(if)节点：框区域写条件，满足走其后直到否则/结束之间的分支"/>
-                            <Button x:Name="AddFlowElseButton" Content="＋否则" Width="70" Height="32" Margin="6,0,0,0" Click="AddFlowElse_Click" ToolTip="插入否则(else)分支开始（与最近一个检测配对）"/>
-                            <Button x:Name="AddFlowEndButton" Content="＋结束" Width="70" Height="32" Margin="6,0,0,0" Click="AddFlowEnd_Click" ToolTip="插入结束(end)：关闭最近一个未结束的 if/否则 分支"/>
-                        </StackPanel>
-                        <Button DockPanel.Dock="Right" x:Name="LoadFlowButton" Content="加载流程" Width="96" Height="32" Click="LoadFlow_Click"/>
-                        <Button DockPanel.Dock="Right" x:Name="SaveFlowButton" Content="保存流程" Width="96" Height="32" Margin="0,0,8,0" Click="SaveFlow_Click"/>
-                    </DockPanel>
-
-                    <DockPanel Grid.Row="2" Grid.Column="0" Margin="0,8,8,0">
-                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
-                            <Button x:Name="MoveUpButton" Content="上移" Width="60" Height="30" Click="MoveFlowUp_Click" IsEnabled="False"/>
-                            <Button x:Name="MoveDownButton" Content="下移" Width="60" Height="30" Margin="6,0,0,0" Click="MoveFlowDown_Click" IsEnabled="False"/>
-                            <Button x:Name="DeleteNodeButton" Content="删除选中" Width="86" Height="30" Margin="6,0,0,0" Click="DeleteFlowNode_Click" IsEnabled="False"/>
-                        </StackPanel>
-                        <ListBox x:Name="QuickFlowList" SelectionChanged="QuickFlowList_SelectionChanged" FontSize="12"/>
-                    </DockPanel>
-
-                    <Border Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" BorderBrush="#D0D0D0" BorderThickness="1" Padding="8" x:Name="FlowEditorPanel">
+                    <Border Grid.Row="2" Margin="0,8,0,0" BorderBrush="#D0D0D0" BorderThickness="1" Padding="8" x:Name="FlowEditorPanel">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock x:Name="FlowEditorTitle" Text="编辑选中节点" FontSize="13" FontWeight="Bold"/>
-                            <TextBlock x:Name="FlowEditorEmptyHint" Text="（点上方＋按钮添加节点，再点列表行编辑；注意用 检测(if)/否则/结束 组成分支层级）" Foreground="Gray" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="FlowEditorTitle" Text="编辑选中节点（先在右侧队列点选一行）" FontSize="13" FontWeight="Bold"/>
+                            <TextBlock x:Name="FlowEditorEmptyHint" Text="（先点上方＋按钮添加节点，再到右侧快捷流程队列里点行来编辑；缩进层级由 检测/否则/结束/循环/循环结束 自动推导）" Foreground="Gray" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
 
                             <StackPanel x:Name="FlowEditorFields" Visibility="Collapsed" Margin="0,6,0,0">
                                 <WrapPanel x:Name="EditorTargetRow" Margin="0,0,0,6">
@@ -292,6 +174,22 @@
                                         <TextBox x:Name="EditRepeatMax" Style="{StaticResource NumBox}" Text="1" TextChanged="EditNode_TextChanged" ToolTip="每轮到该位置最多点几下"/>
                                         <TextBlock Text="下（同一落点连点）" VerticalAlignment="Center" Margin="4,0,0,0" FontSize="11" Foreground="Gray"/>
                                     </WrapPanel>
+                                    <Expander Header="精细延迟参数（仅当高级设置选“精细延迟”时生效）" Margin="0,4,0,0">
+                                        <WrapPanel Margin="0,6,0,0">
+                                            <TextBlock Text="延迟(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox x:Name="EditDelayMs" Style="{StaticResource NumBox}" Text="300" TextChanged="EditNode_TextChanged"/>
+                                            <TextBlock Text="±" VerticalAlignment="Center" Margin="2,0"/>
+                                            <TextBox x:Name="EditRandomDelay" Style="{StaticResource NumBox}" Text="0" TextChanged="EditNode_TextChanged" ToolTip="延迟随机偏差"/>
+                                            <TextBlock Text="停留(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                            <TextBox x:Name="EditDwellMs" Style="{StaticResource NumBox}" Text="100" TextChanged="EditNode_TextChanged"/>
+                                            <TextBlock Text="±" VerticalAlignment="Center" Margin="2,0"/>
+                                            <TextBox x:Name="EditRandomDwell" Style="{StaticResource NumBox}" Text="0" TextChanged="EditNode_TextChanged"/>
+                                            <TextBlock Text="随机偏移X" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                            <TextBox x:Name="EditRandomX" Style="{StaticResource NumBox}" Text="0" TextChanged="EditNode_TextChanged"/>
+                                            <TextBlock Text="Y" VerticalAlignment="Center" Margin="2,0"/>
+                                            <TextBox x:Name="EditRandomY" Style="{StaticResource NumBox}" Text="0" TextChanged="EditNode_TextChanged"/>
+                                        </WrapPanel>
+                                    </Expander>
                                 </StackPanel>
 
                                 <!-- 检测(if)节点 -->
@@ -299,7 +197,7 @@
                                     <WrapPanel Margin="0,0,0,6">
                                         <TextBlock Text="检测区域" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                         <Button Content="重录区域" Width="88" Height="30" Click="ReRecordFlowRect_Click"/>
-                                        <Button x:Name="TestFlowRegionButton" Content="测试识别" Width="88" Height="30" Margin="6,0,0,0" Click="TestFlowRegion_Click" ToolTip="对已选区域做一次OCR，把识别到的文字显示出来，方便调条件"/>
+                                        <Button x:Name="TestFlowRegionButton" Content="测试识别" Width="88" Height="30" Margin="6,0,0,0" Click="TestFlowRegion_Click" ToolTip="对已选区域做一次OCR，显示识别文字，方便调条件"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,2">
                                         <TextBlock x:Name="EditRectText" VerticalAlignment="Center" Text="未选择区域" Foreground="Gray"/>
@@ -309,10 +207,10 @@
                                     <StackPanel Margin="0,0,0,6">
                                         <TextBlock Text="触发方式" FontWeight="Bold" FontSize="12"/>
                                         <RadioButton x:Name="EditTrigEveryRound" GroupName="FlowTriggerMode" Margin="4,4,0,0" Checked="EditTriggerRadio_Checked">
-                                            <TextBlock TextWrapping="Wrap" FontSize="12">每轮判断（默认）：满足→执行真分支；不满足→执行否则。每一轮都按当前状态走。</TextBlock>
+                                            <TextBlock TextWrapping="Wrap" FontSize="12">符合条件一直触发（真-&gt;真也算）</TextBlock>
                                         </RadioButton>
                                         <RadioButton x:Name="EditTrigOnce" GroupName="FlowTriggerMode" Margin="4,2,0,0" Checked="EditTriggerRadio_Checked">
-                                            <TextBlock TextWrapping="Wrap" FontSize="12">仅响应变化：条件出现瞬间→真分支一次；条件消失瞬间→否则一次；稳定状态不重复（防同一弹窗反复买入）</TextBlock>
+                                            <TextBlock TextWrapping="Wrap" FontSize="12">条件变化才触发（例如：真-&gt;假-&gt;真）</TextBlock>
                                         </RadioButton>
                                     </StackPanel>
                                     <CheckBox x:Name="EditStopWhenTrueCheck" Content="满足即作为停止信号（立即停整流程，不执行真/假分支）" Margin="0,0,0,6" Click="EditNode_Click"/>
@@ -323,7 +221,7 @@
                                             <Button x:Name="AddFlowCondButton" Content="＋子条件" Width="80" Height="28" Click="AddFlowCond_Click"/>
                                             <Button x:Name="DelFlowCondButton" Content="删除所选" Width="80" Height="28" Margin="6,0,0,0" Click="DelFlowCond_Click" IsEnabled="False"/>
                                         </StackPanel>
-                                        <ListBox x:Name="FlowCondList" Height="72" FontSize="12" SelectionChanged="FlowCondList_SelectionChanged"/>
+                                        <ListBox x:Name="FlowCondList" Height="66" FontSize="12" SelectionChanged="FlowCondList_SelectionChanged"/>
                                     </DockPanel>
 
                                     <StackPanel x:Name="FlowCondDetail" Visibility="Collapsed" Margin="0,4,0,0">
@@ -364,16 +262,34 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <!-- 否则/结束 结构标记 -->
+                                <!-- 循环(开始)节点 -->
+                                <StackPanel x:Name="FlowLoopEditor" Visibility="Collapsed">
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <TextBlock Text="内循环次数" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBox x:Name="EditLoopCount" Style="{StaticResource NumBox}" Text="3" TextChanged="EditNode_TextChanged" ToolTip="这一段（循环开始 到 循环结束 之间）在一轮里重复几次"/>
+                                        <TextBlock Text="次（这一段会重复 N 次，然后继续往下）" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="Gray" FontSize="11"/>
+                                    </WrapPanel>
+                                </StackPanel>
+
+                                <!-- 跳转节点 -->
+                                <StackPanel x:Name="FlowJumpEditor" Visibility="Collapsed">
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <TextBlock Text="跳到行" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <ComboBox x:Name="EditJumpTarget" Width="260" VerticalAlignment="Center" SelectionChanged="EditNode_Changed"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="执行到本行就跳去那行继续；若形成环会做死循环保护并结束本轮。" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <!-- 否则/结束/循环结束 结构标记 -->
                                 <StackPanel x:Name="FlowMarkEditor" Visibility="Collapsed">
-                                    <TextBlock Text="这是结构标记节点（否则 / 结束），本身无属性。缩进由 检测(if)/否则/结束 自动推导。" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Text="这是结构标记节点（否则 / 结束 / 循环结束），本身无属性。缩进与执行配对由这些标记自动推导。" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </StackPanel>
                         </StackPanel>
                         </ScrollViewer>
                     </Border>
 
-                    <WrapPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                    <WrapPanel Grid.Row="3" Margin="0,8,0,0">
                         <TextBlock Text="停止条件(勾选生效,可多选,任一达到即停):" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <CheckBox x:Name="StopUseClicksCheck" Content="点击达到" VerticalAlignment="Center" Checked="StopToggle_Changed" Unchecked="StopToggle_Changed"/>
                         <TextBox x:Name="StopClicksBox" Style="{StaticResource NumBox}" Width="50" Margin="4,0,0,0" Text="50" IsEnabled="False"/>
@@ -390,151 +306,302 @@
                         <TextBlock Text="检测里勾的“满足即停”也属停止条件" VerticalAlignment="Center" Foreground="Gray" FontSize="11"/>
                     </WrapPanel>
 
-                    <WrapPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                    <WrapPanel Grid.Row="4" Margin="0,8,0,0">
                         <Button x:Name="StartFlowButton" Content="开始执行" Width="120" Height="34" Click="StartFlow_Click"/>
                         <Button Content="停止" Width="90" Height="34" Margin="8,0,0,0" Click="StopAll_Click"/>
                         <TextBlock x:Name="FlowStatusText" VerticalAlignment="Center" Margin="12,0,0,0" Text="未运行" Foreground="Gray"/>
                     </WrapPanel>
-
-                    <Expander Grid.Row="5" Grid.ColumnSpan="2" x:Name="AutoBuyAdvExpander" Header="高级设置（人类化时序参数）" IsExpanded="False" Margin="0,6,0,0">
-                        <ScrollViewer MaxHeight="168" VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="0,6,0,0">
-                                <WrapPanel Margin="0,0,0,6">
-                                    <TextBlock Text="反应延迟均值(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBox x:Name="AdvReactMean" Style="{StaticResource NumBox}" Text="200"/>
-                                    <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvReactFloor" Style="{StaticResource NumBox}" Text="120"/>
-                                    <TextBlock Text="连点间隔均值(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvInterMean" Style="{StaticResource NumBox}" Text="200"/>
-                                    <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvInterFloor" Style="{StaticResource NumBox}" Text="110"/>
-                                </WrapPanel>
-                                <WrapPanel Margin="0,0,0,6">
-                                    <TextBlock Text="按压停留(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBox x:Name="AdvDwellMean" Style="{StaticResource NumBox}" Text="50"/>
-                                    <TextBlock Text="落点抖动概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvJitterPct" Style="{StaticResource NumBox}" Text="12"/>
-                                    <TextBlock Text="抖动幅度(px)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvJitterPx" Style="{StaticResource NumBox}" Text="2"/>
-                                    <TextBlock Text="走神概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvDistractPct" Style="{StaticResource NumBox}" Text="6"/>
-                                </WrapPanel>
-                                <WrapPanel Margin="0,0,0,6">
-                                    <TextBlock Text="走神时长(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBox x:Name="AdvDistractMs" Style="{StaticResource NumBox}" Text="4500"/>
-                                    <TextBlock Text="核查间隔(组)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvCheckMin" Style="{StaticResource NumBox}" Text="2"/>
-                                    <TextBlock Text="~" VerticalAlignment="Center" Margin="2,0"/>
-                                    <TextBox x:Name="AdvCheckMax" Style="{StaticResource NumBox}" Text="3"/>
-                                    <TextBlock Text="核查停顿(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                                    <TextBox x:Name="AdvCheckMs" Style="{StaticResource NumBox}" Text="4500"/>
-                                </WrapPanel>
-                                <WrapPanel Margin="0,0,0,6">
-                                    <TextBlock Text="会话漂移幅度(%)" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBox x:Name="AdvTempoPct" Style="{StaticResource NumBox}" Text="15"/>
-                                    <TextBlock Text="（分布波动宽度为调优默认，未在此暴露）" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="Gray" FontSize="11"/>
-                                </WrapPanel>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Expander>
                 </Grid>
             </TabItem>
-            <TabItem Header="步骤编辑">
+
+            <!-- ========== Tab2 复杂操作（原版功能，单页分组） ========== -->
+            <TabItem Header="复杂操作">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="8">
-                    <WrapPanel Margin="0,0,0,8">
-                        <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="步骤队列执行次数"/>
-                        <TextBox x:Name="LoopCount" Width="60" Height="28" VerticalAlignment="Center" Text="1" VerticalContentAlignment="Center" ToolTip="整个脚本列表的重复执行次数"/>
-                        <CheckBox x:Name="BreakOnEmpty" Content="识别为空则(防止步骤队列死循环无法暂停)" Margin="12,0,0,0" VerticalAlignment="Center" ToolTip="如果勾选，当任何识别步骤(OCR)的结果为空时，将立即停止整个脚本的运行"/>
-                        <CheckBox x:Name="FailSafeCheck" Content="防卡死(5秒内右键10次)" IsChecked="True" VerticalAlignment="Center" Margin="8,0,0,0" ToolTip="启用后，5秒内连续点击鼠标右键10次可强制停止脚本"/>
-                    </WrapPanel>
-                    <WrapPanel Margin="0,0,0,8">
-                        <Button Content="执行全部步骤" Width="120" Height="32" Click="RunScriptAll_Click"/>
-                        <Button Content="清空全部步骤" Width="120" Height="32" Margin="8,0,0,0" Click="ClearScriptAll_Click"/>
-                        <Button x:Name="StopAllButton" Content="停止全部步骤(F12)" Width="180" Height="32" Margin="8,0,0,0" Click="StopAll_Click"/>
-                        <Button Content="绑定停止快捷键" Width="130" Height="32" Margin="8,0,0,0" Click="BindHotkey_Click"/>
-                    </WrapPanel>
-                    <WrapPanel>
-                        <Button Content="保存队列" Width="100" Height="32" Click="SaveSteps_Click"/>
-                        <Button Content="加载队列" Width="100" Height="32" Margin="8,0,0,0" Click="LoadSteps_Click"/>
-                        <CheckBox x:Name="UseGpuCheck" Content="启动GPU加速(可在输出日志测试识别速度后选择是否启动GPU加速)" IsChecked="False" VerticalAlignment="Center" Margin="8,0,0,0" ToolTip="勾选：尝试使用显卡加速(需要环境支持)；不勾选：强制使用CPU"/>
-                    </WrapPanel>
-                    <WrapPanel Margin="0,8,0,0">
-                        <TextBlock Text="定时任务：" VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Margin="0,0,8,0"/>
-                        
-                        <!-- 启动定时设置 -->
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="启动时间" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip="设定的时间早于当前时间默认为次日执行"/>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBox x:Name="ScheduleStartH" Width="22" MaxLength="2" Text="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
-                                <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
-                                <TextBox x:Name="ScheduleStartM" Width="22" MaxLength="2" Text="00" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
-                                <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
-                                <TextBox x:Name="ScheduleStartS" Width="22" MaxLength="2" Text="00" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
-                            </StackPanel>
-                            <Button x:Name="ToggleStartScheduleButton" Content="启用启动" Width="70" Height="32" Margin="8,0,0,0" Click="ToggleStartScheduleButton_Click"/>
+
+                    <!-- 执行 / 队列工具 -->
+                    <GroupBox Header="运行与队列" Padding="6">
+                        <StackPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="步骤队列执行次数"/>
+                                <TextBox x:Name="LoopCount" Width="60" Height="28" VerticalAlignment="Center" Text="1" VerticalContentAlignment="Center" ToolTip="整个脚本列表的重复执行次数"/>
+                                <CheckBox x:Name="BreakOnEmpty" Content="识别为空则停(防死循环)" Margin="12,0,0,0" VerticalAlignment="Center" ToolTip="勾选后，任一识别(OCR)步骤结果为空时立即停止整个脚本"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <Button Content="执行全部步骤" Width="120" Height="32" Click="RunScriptAll_Click"/>
+                                <Button Content="清空全部步骤" Width="120" Height="32" Margin="8,0,0,0" Click="ClearScriptAll_Click"/>
+                            </WrapPanel>
+                            <WrapPanel>
+                                <Button Content="保存队列" Width="100" Height="32" Click="SaveSteps_Click"/>
+                                <Button Content="加载队列" Width="100" Height="32" Margin="8,0,0,0" Click="LoadSteps_Click"/>
+                                <TextBlock Text="（队列显示在右侧，右键可编辑/复制/删除/执行所选，可拖拽排序）" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="Gray" FontSize="11"/>
+                            </WrapPanel>
                         </StackPanel>
-                        
-                        <!-- 停止定时设置 -->
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="停止时间" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip="设定的时间早于当前时间默认为次日执行"/>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBox x:Name="ScheduleStopH" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
-                                <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
-                                <TextBox x:Name="ScheduleStopM" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
-                                <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
-                                <TextBox x:Name="ScheduleStopS" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                    </GroupBox>
+
+                    <!-- 定时任务 -->
+                    <GroupBox Header="定时任务" Padding="6" Margin="0,8,0,0">
+                        <WrapPanel>
+                            <TextBlock Text="定时任务：" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,8,0"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="启动时间" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip="设定的时间早于当前时间默认为次日执行"/>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox x:Name="ScheduleStartH" Width="22" MaxLength="2" Text="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBox x:Name="ScheduleStartM" Width="22" MaxLength="2" Text="00" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBox x:Name="ScheduleStartS" Width="22" MaxLength="2" Text="00" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                </StackPanel>
+                                <Button x:Name="ToggleStartScheduleButton" Content="启用启动" Width="70" Height="32" Margin="8,0,0,0" Click="ToggleStartScheduleButton_Click"/>
                             </StackPanel>
-                            <Button x:Name="ToggleStopScheduleButton" Content="启用停止" Width="70" Height="32" Margin="8,0,0,0" Click="ToggleStopScheduleButton_Click"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="停止时间" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip="设定的时间早于当前时间默认为次日执行"/>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox x:Name="ScheduleStopH" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBox x:Name="ScheduleStopM" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBox x:Name="ScheduleStopS" Width="22" MaxLength="2" Text="" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="NumberOnly_PreviewTextInput" TextChanged="TimeInput_TextChanged"/>
+                                </StackPanel>
+                                <Button x:Name="ToggleStopScheduleButton" Content="启用停止" Width="70" Height="32" Margin="8,0,0,0" Click="ToggleStopScheduleButton_Click"/>
+                            </StackPanel>
+                            <TextBlock x:Name="ScheduleStatusText" Text="未启动" VerticalAlignment="Center" Margin="16,0,0,0" Foreground="Gray"/>
+                        </WrapPanel>
+                    </GroupBox>
+
+                    <!-- 窗口 A / B 配置 -->
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <GroupBox Grid.Column="0" Header="窗口A（识别 / 点击 / 置顶）" Padding="6">
+                            <StackPanel Margin="4">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="A识别结果：" />
+                                    <TextBlock x:Name="OcrResultTextA" Width="200" VerticalAlignment="Center" Text="" />
+                                </StackPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button x:Name="SelectAreaButtonA" Content="选择A识别区域" Width="120" Height="32" Margin="0,0,8,0" Click="SelectAreaButtonA_Click"/>
+                                    <Button Content="添加A识别步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddOcrStepA_Click"/>
+                                    <Button x:Name="ShotButtonA" Content="识别A并保存" Width="120" Height="32" Margin="0,0,8,0" Click="ShotButtonA_Click"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <CheckBox x:Name="OcrAOnlyNums" Content="只识别数字" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="True"/>
+                                    <CheckBox x:Name="ReuseOcrRoiCacheCheck" Content="ROI未变化复用OCR结果" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="识别区域画面未变化时复用上次OCR文本以提速；与B操作共用"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button x:Name="SelectClickPosA" Content="选择A点击位置" Width="120" Height="32" Margin="0,0,8,0" Click="SelectClickPosA_Click"/>
+                                    <Button Content="添加A点击步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddClickStepA_Click"/>
+                                    <Button x:Name="ClickSelectedPosA" Content="点击A选择位置" Width="120" Height="32" Margin="0,0,8,0" Click="ClickSelectedPosA_Click"/>
+                                    <Button Content="置顶A" Width="72" Height="32" Click="AddBringFrontA_Click"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,6,0,0">
+                                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="随机偏移(px)"/>
+                                    <TextBox x:Name="RandomXA" Width="44" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="点击位置X随机偏差像素 ±"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="x"/>
+                                    <TextBox x:Name="RandomYA" Width="44" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="点击位置Y随机偏差像素 ±"/>
+                                    <TextBlock Margin="12,0,4,0" VerticalAlignment="Center" Text="延迟"/>
+                                    <TextBox x:Name="DelayMsA" Width="44" Height="26" VerticalAlignment="Center" Text="300" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
+                                    <TextBox x:Name="RandomDelayA" Width="40" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="12,0,4,0" VerticalAlignment="Center" Text="停留"/>
+                                    <TextBox x:Name="DwellMsA" Width="44" Height="26" VerticalAlignment="Center" Text="100" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
+                                    <TextBox x:Name="RandomDwellA" Width="40" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Grid.Column="2" Header="窗口B（识别 / 点击 / 置顶）" Padding="6">
+                            <StackPanel Margin="4">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="B识别结果：" />
+                                    <TextBlock x:Name="OcrResultTextB" Width="200" VerticalAlignment="Center" Text="" />
+                                </StackPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button x:Name="SelectAreaButtonB" Content="选择B识别区域" Width="120" Height="32" Margin="0,0,8,0" Click="SelectAreaButtonB_Click"/>
+                                    <Button Content="添加B识别步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddOcrStepB_Click"/>
+                                    <Button x:Name="ShotButtonB" Content="识别B并保存" Width="120" Height="32" Margin="0,0,8,0" Click="ShotButtonB_Click"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <CheckBox x:Name="OcrBOnlyNums" Content="只识别数字" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="True"/>
+                                    <CheckBox Content="ROI未变化复用OCR结果" VerticalAlignment="Center" Margin="0,0,8,0" IsChecked="{Binding ElementName=ReuseOcrRoiCacheCheck, Path=IsChecked, Mode=TwoWay}" ToolTip="与A操作共用此设置"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button x:Name="SelectClickPosB" Content="选择B点击位置" Width="120" Height="32" Margin="0,0,8,0" Click="SelectClickPosB_Click"/>
+                                    <Button Content="添加B点击步骤" Width="120" Height="32" Margin="0,0,8,0" Click="AddClickStepB_Click"/>
+                                    <Button x:Name="ClickSelectedPosB" Content="点击B选择位置" Width="120" Height="32" Margin="0,0,8,0" Click="ClickSelectedPosB_Click"/>
+                                    <Button Content="置顶B" Width="72" Height="32" Click="AddBringFrontB_Click"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,6,0,0">
+                                    <TextBlock Margin="0,0,4,0" VerticalAlignment="Center" Text="随机偏移(px)"/>
+                                    <TextBox x:Name="RandomXB" Width="44" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="点击位置X随机偏差像素 ±"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="x"/>
+                                    <TextBox x:Name="RandomYB" Width="44" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center" ToolTip="点击位置Y随机偏差像素 ±"/>
+                                    <TextBlock Margin="12,0,4,0" VerticalAlignment="Center" Text="延迟"/>
+                                    <TextBox x:Name="DelayMsB" Width="44" Height="26" VerticalAlignment="Center" Text="300" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
+                                    <TextBox x:Name="RandomDelayB" Width="40" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="12,0,4,0" VerticalAlignment="Center" Text="停留"/>
+                                    <TextBox x:Name="DwellMsB" Width="44" Height="26" VerticalAlignment="Center" Text="100" VerticalContentAlignment="Center"/>
+                                    <TextBlock Margin="4,0,4,0" VerticalAlignment="Center" Text="±"/>
+                                    <TextBox x:Name="RandomDwellB" Width="40" Height="26" VerticalAlignment="Center" Text="0" VerticalContentAlignment="Center"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </GroupBox>
+                    </Grid>
+
+                    <!-- 加逻辑步骤工具带 -->
+                    <GroupBox Header="加逻辑步骤（往右侧步骤队列末尾添加）" Padding="6" Margin="0,8,0,0">
+                        <StackPanel>
+                            <TextBlock Text="If / 分支（条件写在表达式框，用变量如 A1/B1——先“保存”再引用）" FontSize="11" Foreground="Gray"/>
+                            <WrapPanel Margin="0,2,0,0">
+                                <TextBox x:Name="ExprBox" Width="300" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" GotFocus="ExprBox_GotFocus" LostFocus="ExprBox_LostFocus" ToolTip="如 A1 == '文本' OR B1 > 100"/>
+                                <Button Content="添加 If" Width="78" Height="28" Margin="6,0,0,0" Click="AddIfStep_Click"/>
+                                <Button Content="ElseIf" Width="70" Height="28" Margin="6,0,0,0" Click="AddElseIfStep_Click"/>
+                                <Button Content="Else" Width="60" Height="28" Margin="6,0,0,0" Click="AddElseStep_Click"/>
+                                <Button Content="结束if" Width="70" Height="28" Margin="6,0,0,0" Click="AddEndIfStep_Click"/>
+                                <Button Content="跳出If/Else" Width="90" Height="28" Margin="6,0,0,0" Click="AddBreakBlock_Click"/>
+                            </WrapPanel>
+                            <TextBlock x:Name="ExprHelpText" Margin="2,2,0,2" Foreground="Gray" FontSize="11"
+                                       Text="支持 ==, !=, &gt;, &gt;=, &lt;, &lt;=, and(&amp;&amp;), or(||)；例 a1 == &quot;中文&quot; 或 b1 &gt; 100" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="循环 / 跳转 / 注释 / 保存 / 按键" Margin="0,6,0,0" FontSize="11" Foreground="Gray"/>
+                            <WrapPanel Margin="0,2,0,0">
+                                <TextBlock VerticalAlignment="Center" Text="内循环次数"/>
+                                <TextBox x:Name="LoopInnerCount" Width="48" Height="28" VerticalAlignment="Center" Text="3" VerticalContentAlignment="Center" ToolTip="添加“循环开始”时默认次数"/>
+                                <Button Content="循环开始" Width="80" Height="28" Margin="6,0,0,0" Click="AddLoopStart_Click"/>
+                                <Button Content="循环结束" Width="80" Height="28" Margin="6,0,0,0" Click="AddLoopEnd_Click"/>
+                                <Button Content="跳出循环" Width="80" Height="28" Margin="6,0,0,0" Click="AddBreakLoop_Click"/>
+                                <Button Content="跳入下次循环" Width="100" Height="28" Margin="6,0,0,0" Click="AddContinue_Click"/>
+                                <TextBlock Text="标签/跳转" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                <TextBox x:Name="LabelBox" Width="90" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="4,0,0,0"/>
+                                <Button Content="加标签" Width="66" Height="28" Margin="6,0,0,0" Click="AddLabel_Click"/>
+                                <Button Content="加跳转" Width="66" Height="28" Margin="6,0,0,0" Click="AddGoto_Click"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,4,0,0">
+                                <TextBlock Text="注释" VerticalAlignment="Center"/>
+                                <TextBox x:Name="CommentText" Width="180" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="4,0,0,0"/>
+                                <Button Content="加注释" Width="70" Height="28" Margin="6,0,0,0" Click="AddCommentStep_Click"/>
+                                <TextBlock Text="保存变量(存A/B识别结果)" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                <TextBox x:Name="SaveKey" Width="80" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="4,0,0,0" ToolTip="变量名，如 A1"/>
+                                <Button Content="保存A" Width="70" Height="28" Margin="6,0,0,0" Click="AddSaveA_Click"/>
+                                <Button Content="保存B" Width="70" Height="28" Margin="6,0,0,0" Click="AddSaveB_Click"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,4,0,0">
+                                <TextBlock Text="按键名称" VerticalAlignment="Center"/>
+                                <TextBox x:Name="KeyPressBox" Width="80" Height="28" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="4,0,0,0" ToolTip="如 Enter/F1/A"/>
+                                <TextBlock Text="按压(ms)" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBox x:Name="KeyPressDwell" Width="50" Height="28" VerticalAlignment="Center" Text="50" VerticalContentAlignment="Center" Margin="4,0,0,0"/>
+                                <Button Content="加按键" Width="70" Height="28" Margin="6,0,0,0" Click="AddKeyPressStep_Click"/>
+                                <Button x:Name="IdentifyKeyButton" Content="识别按键" Width="80" Height="28" Margin="6,0,0,0" Click="IdentifyKey_Click"/>
+                                <TextBlock Text="网络步骤为半成品(仅占位，保存时过滤)" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="Gray" FontSize="11"/>
+                            </WrapPanel>
                         </StackPanel>
-                        
-                        <TextBlock x:Name="ScheduleStatusText" Text="未启动" VerticalAlignment="Center" Margin="16,0,0,0" Foreground="Gray"/>
-                    </WrapPanel>
+                    </GroupBox>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
-            <!--
-            <TabItem Header="GPU环境">
-                ... (GPU环境相关内容已删除)
+
+            <!-- ========== Tab3 高级设置 ========== -->
+            <TabItem Header="高级设置">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="8">
+                    <GroupBox Header="时序模式（全局，作用于「快捷操作」流程）" Padding="6">
+                        <StackPanel>
+                            <RadioButton x:Name="TimingHumanRadio" GroupName="TimingMode" IsChecked="True" Margin="4,4,0,0">
+                                <TextBlock TextWrapping="Wrap" FontSize="12">人类化时序（推荐）：点击走对数正态反应/间隔/抖动，接近真人节奏</TextBlock>
+                            </RadioButton>
+                            <RadioButton x:Name="TimingFineRadio" GroupName="TimingMode" Margin="4,4,0,0">
+                                <TextBlock TextWrapping="Wrap" FontSize="12">精细延迟（原版延迟模式）：按每个点击节点自己设的 延迟±随机 / 落点偏移 / 停留 走（固定值）</TextBlock>
+                            </RadioButton>
+                            <TextBlock Text="（原版复杂操作步骤队列始终用每步的精细延迟，不受此项影响）" Foreground="Gray" FontSize="11" Margin="4,4,0,0"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <Expander Header="人类化时序参数（人类化模式生效，σ 形状为调优默认不暴露）" Margin="0,8,0,0">
+                        <StackPanel Margin="0,6,0,0">
+                            <WrapPanel Margin="0,0,0,6">
+                                <TextBlock Text="反应延迟均值(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox x:Name="AdvReactMean" Style="{StaticResource NumBox}" Text="200"/>
+                                <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvReactFloor" Style="{StaticResource NumBox}" Text="120"/>
+                                <TextBlock Text="连点间隔均值(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvInterMean" Style="{StaticResource NumBox}" Text="200"/>
+                                <TextBlock Text="下限(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvInterFloor" Style="{StaticResource NumBox}" Text="110"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <TextBlock Text="按压停留(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox x:Name="AdvDwellMean" Style="{StaticResource NumBox}" Text="50"/>
+                                <TextBlock Text="落点抖动概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvJitterPct" Style="{StaticResource NumBox}" Text="12"/>
+                                <TextBlock Text="抖动幅度(px)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvJitterPx" Style="{StaticResource NumBox}" Text="2"/>
+                                <TextBlock Text="走神概率(%)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvDistractPct" Style="{StaticResource NumBox}" Text="6"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <TextBlock Text="走神时长(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox x:Name="AdvDistractMs" Style="{StaticResource NumBox}" Text="4500"/>
+                                <TextBlock Text="核查间隔(组)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvCheckMin" Style="{StaticResource NumBox}" Text="2"/>
+                                <TextBlock Text="~" VerticalAlignment="Center" Margin="2,0"/>
+                                <TextBox x:Name="AdvCheckMax" Style="{StaticResource NumBox}" Text="3"/>
+                                <TextBlock Text="核查停顿(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                <TextBox x:Name="AdvCheckMs" Style="{StaticResource NumBox}" Text="4500"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <TextBlock Text="会话漂移幅度(%)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox x:Name="AdvTempoPct" Style="{StaticResource NumBox}" Text="15"/>
+                                <TextBlock Text="（分布波动宽度为调优默认，未在此暴露）" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="Gray" FontSize="11"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="精细延迟默认值（新建“快捷操作”点击节点时带入，可逐节点覆盖）" Margin="0,8,0,0">
+                        <WrapPanel Margin="0,8,0,0">
+                            <TextBlock Text="默认延迟(ms)" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox x:Name="DfltDelay" Style="{StaticResource NumBox}" Text="300"/>
+                            <TextBlock Text="±" VerticalAlignment="Center" Margin="2,0"/>
+                            <TextBox x:Name="DfltRandomDelay" Style="{StaticResource NumBox}" Text="0"/>
+                            <TextBlock Text="停留(ms)" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <TextBox x:Name="DfltDwell" Style="{StaticResource NumBox}" Text="100"/>
+                            <TextBlock Text="±" VerticalAlignment="Center" Margin="2,0"/>
+                            <TextBox x:Name="DfltRandomDwell" Style="{StaticResource NumBox}" Text="0"/>
+                            <TextBlock Text="随机偏移X" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <TextBox x:Name="DfltRandomX" Style="{StaticResource NumBox}" Text="0"/>
+                            <TextBlock Text="Y" VerticalAlignment="Center" Margin="2,0"/>
+                            <TextBox x:Name="DfltRandomY" Style="{StaticResource NumBox}" Text="0"/>
+                        </WrapPanel>
+                    </Expander>
+
+                    <GroupBox Header="识别" Padding="6" Margin="0,8,0,0">
+                        <WrapPanel>
+                            <CheckBox x:Name="UseGpuCheck" Content="启动GPU加速(OCR 全局；用显卡推理，需环境支持，默认CPU)" IsChecked="False" VerticalAlignment="Center" ToolTip="勾选：尝试显卡加速(DirectML)；不勾：强制 CPU"/>
+                            <TextBlock Text="（GPU/CPU 切换会重启 OCR 子进程）" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="8,0,0,0"/>
+                        </WrapPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="急停与安全（键盘 F12 + 鼠标防卡死 双通道）" Padding="6" Margin="0,8,0,0">
+                        <StackPanel>
+                            <WrapPanel>
+                                <CheckBox x:Name="FailSafeCheck" Content="防卡死(5秒内右键10次)" IsChecked="True" VerticalAlignment="Center" ToolTip="启用后，运行中在屏幕任意位置 5 秒内连续点鼠标右键 10 次可强制停止脚本（纯监听，不产生点击）"/>
+                                <TextBlock Text="鼠标通道急停；键盘通道用右侧的 F12/自定义快捷键" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="8,0,0,0"/>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,8,0,0">
+                                <Button x:Name="StopAllButton" Content="停止全部步骤(F12)" Width="200" Height="32" Click="StopAll_Click" ToolTip="立即停止正在运行的脚本"/>
+                                <Button Content="绑定停止快捷键" Width="150" Height="32" Margin="8,0,0,0" Click="BindHotkey_Click" ToolTip="按下想用的组合键（如 Ctrl+F5），替换默认的 F12 全局停止热键"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+                </ScrollViewer>
             </TabItem>
-            -->
         </TabControl>
 
-        <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" Margin="8,0,0,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="步骤队列（拖拽调整顺序，右键编辑，按住Ctrl可多选）：" FontSize="14" FontWeight="Bold" />
-            <Grid Grid.Row="1" Margin="0,2,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <ComboBox x:Name="QuickLoadCombo" Grid.Column="0" Margin="0,0,4,0" 
-                          SelectionChanged="QuickLoadCombo_SelectionChanged" 
-                          IsEditable="False" ToolTip="选择保存的队列文件以快速加载"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Content="刷新" Click="RefreshScripts_Click" Padding="8,0" Margin="0,0,4,0"/>
-                    <Button Content="目录" Click="OpenScriptDir_Click" Padding="8,0"/>
-                </StackPanel>
-            </Grid>
-            <ListBox Grid.Row="2" x:Name="StepsList" AllowDrop="True" SelectionMode="Extended"
-                     PreviewMouseLeftButtonDown="StepsList_PreviewMouseLeftButtonDown"
-                     PreviewMouseLeftButtonUp="StepsList_PreviewMouseLeftButtonUp"
-                     Drop="StepsList_Drop"
-                     DragOver="StepsList_DragOver"
-                     MouseMove="StepsList_MouseMove">
-                <ListBox.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="编辑" Click="MenuItem_Edit_Click"/>
-                        <MenuItem Header="复制步骤" Click="MenuItem_Duplicate_Click"/>
-                        <MenuItem Header="删除" Click="MenuItem_Delete_Click"/>
-                        <MenuItem Header="执行所选步骤" Click="MenuItem_ExecuteSelected_Click"/>
-                    </ContextMenu>
-                </ListBox.ContextMenu>
-            </ListBox>
-        </Grid>
-
+        <!-- ============ 底部日志 ============ -->
         <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Vertical" Margin="0,8,0,0">
             <TextBlock Text="输出日志：" FontSize="14" FontWeight="Bold"/>
             <Grid>

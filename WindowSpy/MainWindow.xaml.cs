@@ -32,6 +32,70 @@ namespace WindowSpy
         private readonly System.Collections.Generic.List<QuickFlowNode> _flowNodes = new();
         private bool _syncingFlowEditor = false;
         private bool _syncingCondEditor = false;
+        private bool _condBusy = false;
+        private bool _uiWritePending = false;   // 程序化写控件期间/延后事件到达时也一律忽略
+        private bool _suppressUiEvents = false; // MarkUiWrite 置位，直到本次派发结束（含其间 layout）才清除
+        private bool _flowSyncQueued = false;   // 已排队一次延迟刷新（合并连续触发）
+
+        private void MarkUiWrite()
+        {
+            _uiWritePending = true;
+            _suppressUiEvents = true;
+            Dispatcher.BeginInvoke(new System.Action(() => { _uiWritePending = false; _suppressUiEvents = false; }),
+                                   System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        // 同步写 trace.log（硬崩溃前也能落盘，用于排查栈溢出/递归）
+        private static string TracePath =>
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jietu", "trace.log");
+        private static bool _traceResetDone = false;
+        private void TraceLog(string msg)
+        {
+            try
+            {
+                var dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jietu");
+                System.IO.Directory.CreateDirectory(dir);
+                if (!_traceResetDone)
+                {
+                    _traceResetDone = true;
+                    try { if (System.IO.File.Exists(TracePath)) System.IO.File.Delete(TracePath); } catch { }
+                }
+                System.IO.File.AppendAllText(TracePath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\r\n");
+            }
+            catch { }
+        }
+
+        // 把“重编辑器/重列表面”的同步代码推迟到本次派发(含 layout)结束后再执行，
+        // 避免在 SelectionChanged 派发中改 ListBox/ComboBox 的项/选中，触发 WPF 布局重入导致栈溢出。
+        private void DeferUi(System.Action act)
+        {
+            if (_flowSyncQueued) return;
+            _flowSyncQueued = true;
+            Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                _flowSyncQueued = false;
+                try { act(); }
+                catch (Exception ex) { AppendLog("延迟刷新异常：" + ex.Message); TraceLog("DeferUi exception: " + ex); }
+            }), System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+
+        // 编辑器子系统递归深度保险：若框架在派发过程中又同步回调我们的处理函数，
+        // 深度超过阈值就截断，把“栈溢出闪退”变成可记录的返回。
+        private int _editNest = 0;
+        private bool EnterEdit(string where)
+        {
+            if (_editNest >= 40)
+            {
+                TraceLog($"!! 编辑器递归深度 {_editNest} 于 {where} —— 截断");
+                return false;
+            }
+            _editNest++;
+            return true;
+        }
+        private void ExitEdit()
+        {
+            if (_editNest > 0) _editNest--;
+        }
         private readonly OnnxOcrHelper _ocr = new();
         private volatile bool _stopAll = false;
         private bool _bindingHotkey = false;
@@ -68,6 +132,12 @@ namespace WindowSpy
         public MainWindow()
         {
             InitializeComponent();
+            this.Dispatcher.UnhandledException += (s, args) =>
+            {
+                try { AppendLog("UI 异常（已拦截）：" + args.Exception); }
+                catch { }
+                args.Handled = true;
+            };
             this.Loaded += MainWindow_Loaded;
             _ocr.Logger = AppendLog;
             _ocr.UseGpu = UseGpuCheck?.IsChecked == true;
@@ -909,6 +979,10 @@ namespace WindowSpy
         // 快捷操作：流程构建器（点击 / 检测(if)/否则/结束 + 多子条件 + 多停止条件）
         // ============================
 
+        // ============================
+        // 快捷操作：流程构建器（点击 / 检测(if)/否则/结束 / 循环 / 跳转 + 多子条件 + 多停止条件）
+        // ============================
+
         private int SelectedFlowIndex => QuickFlowList?.SelectedIndex ?? -1;
 
         private void SyncButtonsAndEditor()
@@ -918,7 +992,8 @@ namespace WindowSpy
             if (MoveUpButton != null) { MoveUpButton.IsEnabled = has && idx > 0; }
             if (MoveDownButton != null) { MoveDownButton.IsEnabled = has && idx < _flowNodes.Count - 1; }
             if (DeleteNodeButton != null) { DeleteNodeButton.IsEnabled = has; }
-            LoadEditorFromSelected();
+            // 编辑器重载延到空闲时执行，避免在 SelectionChanged/layout 派发里改 ComboBox 项触发重入
+            DeferUi(LoadEditorFromSelected);
         }
 
         private string FlowNodeLabel(QuickFlowNode n)
@@ -935,36 +1010,69 @@ namespace WindowSpy
                 case QuickNodeType.If:
                     {
                         string rect = (n.Rect.Width > 0 && n.Rect.Height > 0) ? $"{n.Rect.Width}×{n.Rect.Height}" : "未选区";
-                        string trig = n.TriggerMode == CheckTriggerMode.EveryRound ? " [每轮都点]" : " [每次出现]";
+                        string trig = n.TriggerMode == CheckTriggerMode.EveryRound ? " [每轮判断]" : " [变化触发]";
                         string stop = n.StopWhenTrue ? " [满足即停]" : "";
                         return $"[检测] 窗口{win} 区{rect}{trig}{stop} 条件:{QuickFlowEval.DescribeConditions(n.Conditions)}";
                     }
                 case QuickNodeType.Else: return "[否则]";
                 case QuickNodeType.End: return "[结束]";
+                case QuickNodeType.LoopStart: return $"[循环 x{Math.Max(1, n.LoopCount)}]";
+                case QuickNodeType.LoopEnd: return "[循环结束]";
+                case QuickNodeType.Jump:
+                    return n.JumpTarget >= 0 && n.JumpTarget < _flowNodes.Count
+                        ? $"[跳到 第{n.JumpTarget + 1}行]"
+                        : "[跳转] 未设目标";
                 default: return n.Type.ToString();
             }
         }
 
         private void RefreshFlowList(bool reselectCurrent)
         {
+            if (!EnterEdit("RefreshFlowList")) { TraceLog("RefreshFlowList 递归已截断"); return; }
+            try
+            {
             int keep = QuickFlowList.SelectedIndex;
-            QuickFlowList.SelectionChanged -= QuickFlowList_SelectionChanged;
-            QuickFlowList.Items.Clear();
+            var contents = new string[_flowNodes.Count];
             int depth = 0;
             for (int i = 0; i < _flowNodes.Count; i++)
             {
                 var nd = _flowNodes[i];
                 int showDepth = depth;
-                if (nd.Type == QuickNodeType.End) { depth = Math.Max(0, depth - 1); showDepth = depth; }
-                else if (nd.Type == QuickNodeType.Else) { showDepth = Math.Max(0, depth - 1); }
-                else if (nd.Type == QuickNodeType.If) { depth++; }
-
-                string prefix = new string(' ', showDepth * 3);
-                QuickFlowList.Items.Add(new ListBoxItem { Content = $"{i + 1}. {prefix}{FlowNodeLabel(nd)}", FontSize = 12 });
+                if (nd.Type == QuickNodeType.End || nd.Type == QuickNodeType.LoopEnd)
+                {
+                    depth = Math.Max(0, depth - 1);
+                    showDepth = depth;
+                }
+                else if (nd.Type == QuickNodeType.Else)
+                {
+                    showDepth = Math.Max(0, depth - 1);
+                }
+                else if (nd.Type == QuickNodeType.If || nd.Type == QuickNodeType.LoopStart)
+                {
+                    depth++;
+                }
+                contents[i] = $"{i + 1}. {new string(' ', showDepth * 3)}{FlowNodeLabel(nd)}";
             }
-            if (reselectCurrent && keep >= 0 && keep < _flowNodes.Count) QuickFlowList.SelectedIndex = keep;
-            QuickFlowList.SelectionChanged += QuickFlowList_SelectionChanged;
+
+            // 数量一致时只就地改行文字，避免整表清空导致选中/焦点抖动
+            if (contents.Length == QuickFlowList.Items.Count)
+            {
+                for (int i = 0; i < contents.Length; i++)
+                    if (QuickFlowList.Items[i] is ListBoxItem it) it.Content = contents[i];
+            }
+            else
+            {
+                TraceLog($"FlowList 重建 {contents.Length} 行 keep={keep} reselect={reselectCurrent}");
+                QuickFlowList.SelectionChanged -= QuickFlowList_SelectionChanged;
+                QuickFlowList.Items.Clear();
+                for (int i = 0; i < contents.Length; i++)
+                    QuickFlowList.Items.Add(new ListBoxItem { Content = contents[i], FontSize = 12 });
+                if (reselectCurrent && keep >= 0 && keep < _flowNodes.Count) QuickFlowList.SelectedIndex = keep;
+                QuickFlowList.SelectionChanged += QuickFlowList_SelectionChanged;
+            }
             SyncButtonsAndEditor();
+            }
+            finally { ExitEdit(); }
         }
 
         private int InsertIndexAfterSelected() => SelectedFlowIndex >= 0 && SelectedFlowIndex < _flowNodes.Count ? SelectedFlowIndex + 1 : _flowNodes.Count;
@@ -979,7 +1087,9 @@ namespace WindowSpy
         {
             if (_boundAHwnd == IntPtr.Zero && _boundBHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定窗口A或B"); return; }
             int at = InsertIndexAfterSelected();
-            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.Click, Target = PreferredTarget(), RepeatMin = 1, RepeatMax = 1 });
+            var n = new QuickFlowNode { Type = QuickNodeType.Click, Target = PreferredTarget(), RepeatMin = 1, RepeatMax = 1 };
+            ApplyFineDefaults(n);
+            _flowNodes.Insert(at, n);
             RefreshFlowList(false);
             QuickFlowList.SelectedIndex = at;
             AppendLog($"已添加点击节点（第 {at + 1} 行）：在右侧重录点击位置");
@@ -994,7 +1104,7 @@ namespace WindowSpy
             _flowNodes.Insert(at, n);
             RefreshFlowList(false);
             QuickFlowList.SelectedIndex = at;
-            AppendLog($"已添加检测(if)节点（第 {at + 1} 行）：框检测区域、写子条件；其后的行会成为真分支，直到 否则/结束");
+            AppendLog($"已添加检测(if)节点（第 {at + 1} 行）：框区域、写子条件；其后的行是真分支，直到 否则/结束");
         }
 
         private void AddFlowElse_Click(object sender, RoutedEventArgs e)
@@ -1015,7 +1125,39 @@ namespace WindowSpy
             AppendLog($"已添加结束(end)节点（第 {at + 1} 行）：关闭最近一个未配对的 if/否则");
         }
 
-        private void QuickFlowList_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncButtonsAndEditor();
+        private void AddFlowLoop_Click(object sender, RoutedEventArgs e)
+        {
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.LoopStart, Target = PreferredTarget(), LoopCount = 3 });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加循环(开始)节点（第 {at + 1} 行，默认 3 次）：右侧改次数，用 循环结束 收尾");
+        }
+
+        private void AddFlowLoopEnd_Click(object sender, RoutedEventArgs e)
+        {
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.LoopEnd, Target = PreferredTarget() });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加循环结束节点（第 {at + 1} 行）：关闭最近一个未配对的 循环(开始)");
+        }
+
+        private void AddFlowJump_Click(object sender, RoutedEventArgs e)
+        {
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.Jump, Target = PreferredTarget(), JumpTarget = -1 });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加跳转节点（第 {at + 1} 行）：右侧选要跳到的行");
+        }
+
+        private void QuickFlowList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // 重建/清空期间的瞬时 -1 不处理，避免编辑器闪隐（隐藏交给 RefreshFlowList 末的 Sync）
+            if (QuickFlowList.SelectedIndex < 0) return;
+            DeferUi(SyncButtonsAndEditor);
+        }
 
         private void MoveFlowUp_Click(object sender, RoutedEventArgs e)
         {
@@ -1049,23 +1191,31 @@ namespace WindowSpy
 
         private void LoadEditorFromSelected()
         {
+            if (!EnterEdit("LoadEditorFromSelected")) { TraceLog("LoadEditor 递归已截断"); return; }
+            try
+            {
             int idx = SelectedFlowIndex;
             bool has = idx >= 0 && idx < _flowNodes.Count;
             if (FlowEditorEmptyHint != null) FlowEditorEmptyHint.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
             if (FlowEditorFields != null) FlowEditorFields.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
             if (!has) return;
+            MarkUiWrite();
 
             var n = _flowNodes[idx];
             if (FlowEditorTitle != null)
                 FlowEditorTitle.Text = $"编辑选中节点（第 {idx + 1} 行）";
+            TraceLog($"LoadEditor idx={idx} type={n.Type}");
 
             _syncingFlowEditor = true;
             try
             {
-                bool isMark = n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End;
-                if (EditorTargetRow != null) EditorTargetRow.Visibility = isMark ? Visibility.Collapsed : Visibility.Visible;
+                bool showTarget = n.Type == QuickNodeType.Click || n.Type == QuickNodeType.If;
+                bool isMark = n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End || n.Type == QuickNodeType.LoopEnd;
+                if (EditorTargetRow != null) EditorTargetRow.Visibility = showTarget ? Visibility.Visible : Visibility.Collapsed;
                 if (FlowClickEditor != null) FlowClickEditor.Visibility = n.Type == QuickNodeType.Click ? Visibility.Visible : Visibility.Collapsed;
                 if (FlowIfEditor != null) FlowIfEditor.Visibility = n.Type == QuickNodeType.If ? Visibility.Visible : Visibility.Collapsed;
+                if (FlowLoopEditor != null) FlowLoopEditor.Visibility = n.Type == QuickNodeType.LoopStart ? Visibility.Visible : Visibility.Collapsed;
+                if (FlowJumpEditor != null) FlowJumpEditor.Visibility = n.Type == QuickNodeType.Jump ? Visibility.Visible : Visibility.Collapsed;
                 if (FlowMarkEditor != null) FlowMarkEditor.Visibility = isMark ? Visibility.Visible : Visibility.Collapsed;
                 if (EditTargetCombo != null) EditTargetCombo.SelectedIndex = n.Target == TargetType.B ? 1 : 0;
 
@@ -1074,6 +1224,7 @@ namespace WindowSpy
                     if (EditRepeatMin != null) EditRepeatMin.Text = n.RepeatMin.ToString();
                     if (EditRepeatMax != null) EditRepeatMax.Text = n.RepeatMax.ToString();
                     if (EditPointText != null) EditPointText.Text = n.Point.IsEmpty ? "未选择" : $"{n.Point.X},{n.Point.Y}";
+                    LoadFineFields(n);
                 }
                 else if (n.Type == QuickNodeType.If)
                 {
@@ -1085,10 +1236,90 @@ namespace WindowSpy
                     if (EditTrigOnce != null) EditTrigOnce.IsChecked = n.TriggerMode == CheckTriggerMode.OncePerAppearance;
                     if (EditStopWhenTrueCheck != null) EditStopWhenTrueCheck.IsChecked = n.StopWhenTrue;
                     if (n.Conditions.Count == 0) n.Conditions.Add(new FlowCondition { Kind = CheckConditionKind.HasContent });
+                    TraceLog("LoadEditor -> RefreshCondList");
                     RefreshCondList();
                 }
+                else if (n.Type == QuickNodeType.LoopStart)
+                {
+                    if (EditLoopCount != null) EditLoopCount.Text = Math.Max(1, n.LoopCount).ToString();
+                }
+                else if (n.Type == QuickNodeType.Jump)
+                {
+                    TraceLog("LoadEditor -> PopulateJumpTarget");
+                    PopulateJumpTarget(idx, n);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog("节点编辑器载入异常：" + ex);
+                TraceLog("LoadEditor exception: " + ex);
             }
             finally { _syncingFlowEditor = false; }
+            }
+            finally { ExitEdit(); }
+        }
+
+        private void LoadFineFields(QuickFlowNode n)
+        {
+            if (EditDelayMs != null) EditDelayMs.Text = n.DelayMs.ToString();
+            if (EditRandomDelay != null) EditRandomDelay.Text = n.RandomDelay.ToString();
+            if (EditDwellMs != null) EditDwellMs.Text = n.DwellMs.ToString();
+            if (EditRandomDwell != null) EditRandomDwell.Text = n.RandomDwell.ToString();
+            if (EditRandomX != null) EditRandomX.Text = n.RandomX.ToString();
+            if (EditRandomY != null) EditRandomY.Text = n.RandomY.ToString();
+        }
+
+        private void ApplyFineDefaults(QuickFlowNode n)
+        {
+            n.DelayMs = ParseInt(DfltDelay?.Text, 300);
+            n.RandomDelay = ParseInt(DfltRandomDelay?.Text, 0);
+            n.DwellMs = ParseInt(DfltDwell?.Text, 100);
+            n.RandomDwell = ParseInt(DfltRandomDwell?.Text, 0);
+            n.RandomX = ParseInt(DfltRandomX?.Text, 0);
+            n.RandomY = ParseInt(DfltRandomY?.Text, 0);
+        }
+
+        private void PopulateJumpTarget(int selfIdx, QuickFlowNode n)
+        {
+            if (EditJumpTarget == null) return;
+            var labels = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < _flowNodes.Count; i++)
+            {
+                if (i == selfIdx) continue;
+                labels.Add($"{i + 1}. {FlowNodeLabel(_flowNodes[i])}");
+            }
+            bool same = EditJumpTarget.Items.Count == labels.Count;
+            if (same)
+            {
+                for (int i = 0; i < labels.Count; i++)
+                    if (!Equals((EditJumpTarget.Items[i] as ComboBoxItem)?.Content, labels[i])) { same = false; break; }
+            }
+            // 内容没变就不重建，避免 Clear/Add 反复触发 SelectionChanged + layout 重入
+            if (!same)
+            {
+                EditJumpTarget.SelectionChanged -= EditNode_Changed;
+                try
+                {
+                    EditJumpTarget.Items.Clear();
+                    foreach (var lab in labels) EditJumpTarget.Items.Add(new ComboBoxItem { Content = lab });
+                }
+                finally { EditJumpTarget.SelectionChanged += EditNode_Changed; }
+            }
+            int k = -1;
+            if (n.JumpTarget >= 0 && n.JumpTarget < _flowNodes.Count && n.JumpTarget != selfIdx)
+                k = n.JumpTarget > selfIdx ? n.JumpTarget - 1 : n.JumpTarget;
+            if (k >= 0 && k < EditJumpTarget.Items.Count && EditJumpTarget.SelectedIndex != k)
+            {
+                EditJumpTarget.SelectionChanged -= EditNode_Changed;
+                try { EditJumpTarget.SelectedIndex = k; }
+                finally { EditJumpTarget.SelectionChanged += EditNode_Changed; }
+            }
+            else if (k < 0 && EditJumpTarget.SelectedIndex >= 0)
+            {
+                EditJumpTarget.SelectionChanged -= EditNode_Changed;
+                try { EditJumpTarget.SelectedIndex = -1; }
+                finally { EditJumpTarget.SelectionChanged += EditNode_Changed; }
+            }
         }
 
         private void CommitEditorToSelected()
@@ -1096,47 +1327,63 @@ namespace WindowSpy
             int idx = SelectedFlowIndex;
             if (idx < 0 || idx >= _flowNodes.Count) return;
             var n = _flowNodes[idx];
-            if (n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End) return;
-            if (EditTargetCombo != null) n.Target = EditTargetCombo.SelectedIndex == 1 ? TargetType.B : TargetType.A;
+            if (n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End || n.Type == QuickNodeType.LoopEnd) return;
+            if ((n.Type == QuickNodeType.Click || n.Type == QuickNodeType.If) && EditTargetCombo != null)
+                n.Target = EditTargetCombo.SelectedIndex == 1 ? TargetType.B : TargetType.A;
             if (n.Type == QuickNodeType.Click)
             {
                 int mn = ClampInt(ParseInt(EditRepeatMin?.Text, 1), 1, 100);
                 int mx = ClampInt(ParseInt(EditRepeatMax?.Text, mn), mn, 100);
                 n.RepeatMin = mn; n.RepeatMax = mx;
+                n.DelayMs = Math.Max(0, ParseInt(EditDelayMs?.Text, 300));
+                n.RandomDelay = Math.Max(0, ParseInt(EditRandomDelay?.Text, 0));
+                n.DwellMs = Math.Max(0, ParseInt(EditDwellMs?.Text, 100));
+                n.RandomDwell = Math.Max(0, ParseInt(EditRandomDwell?.Text, 0));
+                n.RandomX = Math.Max(0, ParseInt(EditRandomX?.Text, 0));
+                n.RandomY = Math.Max(0, ParseInt(EditRandomY?.Text, 0));
             }
             else if (n.Type == QuickNodeType.If)
             {
                 n.TriggerMode = EditTrigOnce?.IsChecked == true ? CheckTriggerMode.OncePerAppearance : CheckTriggerMode.EveryRound;
                 n.StopWhenTrue = EditStopWhenTrueCheck?.IsChecked == true;
             }
+            else if (n.Type == QuickNodeType.LoopStart)
+            {
+                n.LoopCount = ClampInt(ParseInt(EditLoopCount?.Text, 3), 1, 9999);
+            }
+            else if (n.Type == QuickNodeType.Jump)
+            {
+                int k = EditJumpTarget?.SelectedIndex ?? -1;
+                n.JumpTarget = k >= 0 ? (k >= idx ? k + 1 : k) : -1;
+            }
         }
 
         private void EditNode_Changed(object sender, SelectionChangedEventArgs e)
         {
-            if (_syncingFlowEditor) return;
+            if (_syncingFlowEditor || _uiWritePending || _suppressUiEvents) return;
             CommitEditorToSelected();
-            RefreshFlowList(true);
+            DeferUi(() => RefreshFlowList(true));
         }
 
         private void EditNode_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_syncingFlowEditor) return;
+            if (_syncingFlowEditor || _uiWritePending || _suppressUiEvents) return;
             CommitEditorToSelected();
-            RefreshFlowList(true);
+            DeferUi(() => RefreshFlowList(true));
         }
 
         private void EditNode_Click(object sender, RoutedEventArgs e)
         {
-            if (_syncingFlowEditor) return;
+            if (_syncingFlowEditor || _uiWritePending || _suppressUiEvents) return;
             CommitEditorToSelected();
-            RefreshFlowList(true);
+            DeferUi(() => RefreshFlowList(true));
         }
 
         private void EditTriggerRadio_Checked(object sender, RoutedEventArgs e)
         {
-            if (_syncingFlowEditor) return;
+            if (_syncingFlowEditor || _uiWritePending || _suppressUiEvents) return;
             CommitEditorToSelected();
-            RefreshFlowList(true);
+            DeferUi(() => RefreshFlowList(true));
         }
 
         private void ReRecordFlowPoint_Click(object sender, RoutedEventArgs e)
@@ -1204,7 +1451,7 @@ namespace WindowSpy
             bool empty = string.IsNullOrWhiteSpace(text);
             if (EditRectTestText != null)
             {
-                EditRectTestText.Text = empty ? "未识别到数据（可改用“区域出现文字/为空”等条件或换区域）" : $"识别到：{text}";
+                EditRectTestText.Text = empty ? "未识别到数据（可换区域或改用“出现文字/为空”等条件）" : $"识别到：{text}";
                 EditRectTestText.Foreground = empty ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
             }
             AppendLog($"快捷操作：测试识别 => {(empty ? "未识别到数据" : text)}");
@@ -1225,51 +1472,97 @@ namespace WindowSpy
 
         private void RefreshCondList()
         {
-            var n = CurrentIfNode();
-            int keep = FlowCondList.SelectedIndex;
-            FlowCondList.SelectionChanged -= FlowCondList_SelectionChanged;
-            FlowCondList.Items.Clear();
-            if (n != null)
+            if (!EnterEdit("RefreshCondList")) { TraceLog("RefreshCondList 递归已截断"); return; }
+            try
             {
-                for (int i = 0; i < n.Conditions.Count; i++)
+                MarkUiWrite();
+                var n = CurrentIfNode();
+                int keep = FlowCondList.SelectedIndex;
+                var labels = new string[n == null ? 0 : n.Conditions.Count];
+                if (n != null)
                 {
-                    var c = n.Conditions[i];
-                    string pre = i == 0 ? "当 " : (c.Conj == ConjType.Or ? "或 " : "且 ");
-                    FlowCondList.Items.Add(new ListBoxItem { Content = $"{i + 1}. {pre}{QuickFlowEval.DescribeCond(c)}", FontSize = 12 });
+                    for (int i = 0; i < n.Conditions.Count; i++)
+                    {
+                        var c = n.Conditions[i];
+                        string pre = i == 0 ? "当 " : (c.Conj == ConjType.Or ? "或 " : "且 ");
+                        labels[i] = $"{i + 1}. {pre}{QuickFlowEval.DescribeCond(c)}";
+                    }
                 }
-                if (keep >= 0 && keep < n.Conditions.Count) FlowCondList.SelectedIndex = keep;
+                // 数量一致时只就地改行文字，避免整表清空造成抖动/递归
+                if (labels.Length == FlowCondList.Items.Count)
+                {
+                    for (int i = 0; i < labels.Length; i++)
+                        if (FlowCondList.Items[i] is ListBoxItem it) it.Content = labels[i];
+                }
+                else
+                {
+                    TraceLog($"CondList 重建 {labels.Length} 条 keep={keep}");
+                    FlowCondList.SelectionChanged -= FlowCondList_SelectionChanged;
+                    FlowCondList.Items.Clear();
+                    for (int i = 0; i < labels.Length; i++)
+                        FlowCondList.Items.Add(new ListBoxItem { Content = labels[i], FontSize = 12 });
+                    if (keep >= 0 && keep < labels.Length) FlowCondList.SelectedIndex = keep;
+                    FlowCondList.SelectionChanged += FlowCondList_SelectionChanged;
+                }
+                DeferUi(SyncCondUI);
             }
-            FlowCondList.SelectionChanged += FlowCondList_SelectionChanged;
-            SyncCondUI();
+            catch (Exception ex)
+            {
+                AppendLog($"子条件刷新异常：{ex.Message}");
+                TraceLog("RefreshCondList exception: " + ex.Message);
+            }
+            finally { ExitEdit(); }
         }
 
         private void SyncCondUI()
         {
-            var n = CurrentIfNode();
-            bool has = n != null;
-            int ci = SelectedCondIndex;
-            bool valid = has && ci >= 0 && ci < n!.Conditions.Count;
-            if (DelFlowCondButton != null) DelFlowCondButton.IsEnabled = valid;
-            if (FlowCondDetail != null) FlowCondDetail.Visibility = valid ? Visibility.Visible : Visibility.Collapsed;
-            if (valid) LoadCondDetail(n!.Conditions[ci], ci);
+            if (_condBusy) return;
+            _condBusy = true;
+            try
+            {
+                var n = CurrentIfNode();
+                int ci = SelectedCondIndex;
+                bool valid = n != null && ci >= 0 && ci < n!.Conditions.Count;
+                if (DelFlowCondButton != null) DelFlowCondButton.IsEnabled = valid;
+                if (FlowCondDetail != null) FlowCondDetail.Visibility = valid ? Visibility.Visible : Visibility.Collapsed;
+                if (valid) LoadCondDetail(n!.Conditions[ci], ci);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"子条件界面同步异常：{ex.Message}");
+            }
+            finally { _condBusy = false; }
         }
 
         private void LoadCondDetail(FlowCondition c, int ci)
         {
+            if (_syncingCondEditor || _uiWritePending || _suppressUiEvents) return;
+            MarkUiWrite();
             _syncingCondEditor = true;
+            TraceLog($"LoadCondDetail ci={ci} kind={c.Kind}");
             try
             {
                 if (CondConjCombo != null)
                 {
+                    TraceLog("  -> CondConjCombo.SelectedIndex");
                     CondConjCombo.SelectedIndex = c.Conj == ConjType.Or ? 1 : 0;
                     CondConjCombo.IsEnabled = ci > 0;
+                    TraceLog("  <- CondConjCombo ok");
                 }
+                TraceLog("  -> CondKindCombo.SelectedIndex");
                 if (CondKindCombo != null) CondKindCombo.SelectedIndex = (int)c.Kind;
+                TraceLog("  <- CondKindCombo ok");
                 RefreshCondSubPanels();
                 if (CondNumOpCombo != null) CondNumOpCombo.SelectedIndex = (int)c.NumOp;
                 if (CondNumValue != null) CondNumValue.Text = c.NumThreshold.ToString();
                 if (CondTextOpCombo != null) CondTextOpCombo.SelectedIndex = c.TextOp == TextMatchOp.Equal ? 0 : 1;
                 if (CondTextValue != null) CondTextValue.Text = c.TextValue;
+                TraceLog("  LoadCondDetail done");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"子条件载入异常：{ex.Message}");
+                TraceLog("LoadCondDetail exception: " + ex.Message);
             }
             finally { _syncingCondEditor = false; }
         }
@@ -1301,21 +1594,33 @@ namespace WindowSpy
             if (CondTextPanel != null) CondTextPanel.Visibility = kind == 3 ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void FlowCondList_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncCondUI();
+        private void FlowCondList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (FlowCondList.SelectedIndex < 0) return;
+            DeferUi(SyncCondUI);
+        }
 
         private void CondSub_Changed(object sender, SelectionChangedEventArgs e)
         {
-            if (_syncingCondEditor) return;
-            CommitCondDetail();
-            RefreshCondSubPanels();
-            RefreshCondList();
+            if (_syncingCondEditor || _uiWritePending || _suppressUiEvents) return;
+            try
+            {
+                CommitCondDetail();
+                RefreshCondSubPanels();
+                DeferUi(RefreshCondList);
+            }
+            catch (Exception ex) { AppendLog($"子条件切换异常：{ex.Message}"); }
         }
 
         private void CondSub_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_syncingCondEditor) return;
-            CommitCondDetail();
-            RefreshCondList();
+            if (_syncingCondEditor || _uiWritePending || _suppressUiEvents) return;
+            try
+            {
+                CommitCondDetail();
+                DeferUi(RefreshCondList);
+            }
+            catch (Exception ex) { AppendLog($"子条件输入异常：{ex.Message}"); }
         }
 
         private void AddFlowCond_Click(object sender, RoutedEventArgs e)
@@ -1457,6 +1762,9 @@ namespace WindowSpy
             if (AddFlowIfButton != null) AddFlowIfButton.IsEnabled = en;
             if (AddFlowElseButton != null) AddFlowElseButton.IsEnabled = en;
             if (AddFlowEndButton != null) AddFlowEndButton.IsEnabled = en;
+            if (AddFlowLoopButton != null) AddFlowLoopButton.IsEnabled = en;
+            if (AddFlowLoopEndButton != null) AddFlowLoopEndButton.IsEnabled = en;
+            if (AddFlowJumpButton != null) AddFlowJumpButton.IsEnabled = en;
             if (SaveFlowButton != null) SaveFlowButton.IsEnabled = en;
             if (LoadFlowButton != null) LoadFlowButton.IsEnabled = en;
             if (MoveUpButton != null) MoveUpButton.IsEnabled = en && SelectedFlowIndex > 0;
@@ -1465,43 +1773,71 @@ namespace WindowSpy
             if (FlowEditorPanel != null) FlowEditorPanel.IsEnabled = en;
         }
 
-        // 结构校验：if/否则/结束 嵌套配对
+        // 结构校验（栈）：If/LoopStart 开块，Else/End/LoopEnd 收尾配对
         private string? ValidateStructure(System.Collections.Generic.List<QuickFlowNode> nodes)
         {
-            int depth = 0;
+            var stack = new System.Collections.Generic.Stack<QuickNodeType>();
             for (int i = 0; i < nodes.Count; i++)
             {
                 var nd = nodes[i];
-                if (nd.Type == QuickNodeType.If) depth++;
-                else if (nd.Type == QuickNodeType.Else) { if (depth <= 0) return $"第 {i + 1} 行「否则」前没有未配对的检测(if)"; }
-                else if (nd.Type == QuickNodeType.End)
+                switch (nd.Type)
                 {
-                    if (depth <= 0) return $"第 {i + 1} 行「结束」多余（没有与之配对的检测）";
-                    depth--;
+                    case QuickNodeType.If:
+                    case QuickNodeType.LoopStart:
+                        stack.Push(nd.Type);
+                        break;
+                    case QuickNodeType.Else:
+                        if (stack.Count == 0 || stack.Peek() != QuickNodeType.If)
+                            return $"第 {i + 1} 行「否则」前没有未配对的检测(if)";
+                        break;
+                    case QuickNodeType.End:
+                        if (stack.Count == 0 || stack.Peek() != QuickNodeType.If)
+                            return $"第 {i + 1} 行「结束」多余（没有与之配对的检测）";
+                        stack.Pop();
+                        break;
+                    case QuickNodeType.LoopEnd:
+                        if (stack.Count == 0 || stack.Peek() != QuickNodeType.LoopStart)
+                            return $"第 {i + 1} 行「循环结束」多余（没有与之配对的循环开始）";
+                        stack.Pop();
+                        break;
                 }
             }
-            if (depth > 0) return $"有 {depth} 个检测(if) 缺少「结束」";
+            if (stack.Count > 0)
+                return $"有 {stack.Count} 个块未收尾（缺 结束/循环结束）";
             return null;
         }
 
-        private void BuildBranchMaps(System.Collections.Generic.List<QuickFlowNode> nodes, int[] endFor, int[] elseFor)
+        // 预计算：elseFor[i]=If 的否则；endFor[i]=If/Else 匹配的结束；loopEndFor[i]=LoopStart 的循环结束
+        private void BuildBlockMaps(System.Collections.Generic.List<QuickFlowNode> nodes, int[] elseFor, int[] endFor, int[] loopEndFor)
         {
             int n = nodes.Count;
-            for (int i = 0; i < n; i++) { endFor[i] = -1; elseFor[i] = -1; }
+            for (int i = 0; i < n; i++) { elseFor[i] = -1; endFor[i] = -1; loopEndFor[i] = -1; }
+            var stack = new System.Collections.Generic.Stack<int>();
+            var kinds = new System.Collections.Generic.Stack<QuickNodeType>();
             for (int i = 0; i < n; i++)
             {
-                if (nodes[i].Type != QuickNodeType.If && nodes[i].Type != QuickNodeType.Else) continue;
-                int depth = 0;
-                bool foundElse = false;
-                for (int j = i + 1; j < n; j++)
+                var t = nodes[i].Type;
+                if (t == QuickNodeType.If || t == QuickNodeType.LoopStart) { stack.Push(i); kinds.Push(t); }
+                else if (t == QuickNodeType.Else)
                 {
-                    var t = nodes[j].Type;
-                    if (t == QuickNodeType.If) depth++;
-                    else if (t == QuickNodeType.Else) { if (depth == 0 && nodes[i].Type == QuickNodeType.If && !foundElse) { elseFor[i] = j; foundElse = true; } }
-                    else if (t == QuickNodeType.End)
+                    if (stack.Count > 0 && kinds.Peek() == QuickNodeType.If && elseFor[stack.Peek()] < 0)
+                        elseFor[stack.Peek()] = i;
+                }
+                else if (t == QuickNodeType.End)
+                {
+                    if (stack.Count > 0 && kinds.Peek() == QuickNodeType.If)
                     {
-                        if (depth == 0) { endFor[i] = j; break; }
-                        depth--;
+                        int opener = stack.Pop(); kinds.Pop();
+                        endFor[opener] = i;
+                        if (elseFor[opener] >= 0) endFor[elseFor[opener]] = i;
+                    }
+                }
+                else if (t == QuickNodeType.LoopEnd)
+                {
+                    if (stack.Count > 0 && kinds.Peek() == QuickNodeType.LoopStart)
+                    {
+                        int opener = stack.Pop(); kinds.Pop();
+                        loopEndFor[opener] = i;
                     }
                 }
             }
@@ -1509,6 +1845,7 @@ namespace WindowSpy
 
         private sealed class FlowRunOptions
         {
+            public bool UseHumanTiming = true;
             public bool UseClicks; public int StopClicks;
             public bool UseTriggers; public int StopTriggers;
             public bool UseRounds; public int StopRounds;
@@ -1537,19 +1874,26 @@ namespace WindowSpy
                     {
                         if (n.Rect.Width <= 0 || n.Rect.Height <= 0) { errors.Add($"第 {i + 1} 行检测(if)节点未记录区域"); break; }
                         if (n.Conditions.Count == 0) { errors.Add($"第 {i + 1} 行检测(if)节点没有子条件"); break; }
-                        bool hasTextNeeded = n.Conditions.Any(c => c.Kind == CheckConditionKind.TextMatch && string.IsNullOrWhiteSpace(c.TextValue));
-                        if (hasTextNeeded) { errors.Add($"第 {i + 1} 行存在“文本匹配”子条件但未填目标文字"); break; }
+                        if (n.Conditions.Any(c => c.Kind == CheckConditionKind.TextMatch && string.IsNullOrWhiteSpace(c.TextValue)))
+                        { errors.Add($"第 {i + 1} 行存在“文本匹配”子条件但未填目标文字"); break; }
                     }
+                    if (n.Type == QuickNodeType.LoopStart && n.LoopCount < 1)
+                    { errors.Add($"第 {i + 1} 行循环次数需≥1"); break; }
+                    if (n.Type == QuickNodeType.Jump && (n.JumpTarget < 0 || n.JumpTarget >= _flowNodes.Count))
+                    { errors.Add($"第 {i + 1} 行跳转未选目标行"); break; }
                 }
             }
             if (errors.Count > 0) { AppendLog("快捷操作：无法开始 - " + string.Join("；", errors)); return; }
 
-            ApplyTimingConfig();
+            if (TimingHumanRadio?.IsChecked != false) ApplyTimingConfig();   // 人类化才读人类参数
             var nodes = _flowNodes.Select(x => x.Clone()).ToList();
             IntPtr hwndA = _boundAHwnd, hwndB = _boundBHwnd;
 
             var stopDto = ReadStopDto();
-            var opts = new FlowRunOptions();
+            var opts = new FlowRunOptions
+            {
+                UseHumanTiming = TimingFineRadio?.IsChecked != true,
+            };
             opts.UseClicks = stopDto.UseClicks && stopDto.Clicks > 0; opts.StopClicks = stopDto.Clicks;
             opts.UseTriggers = stopDto.UseTriggers && stopDto.Triggers > 0; opts.StopTriggers = stopDto.Triggers;
             opts.UseRounds = stopDto.UseRounds && stopDto.Rounds > 0; opts.StopRounds = stopDto.Rounds;
@@ -1572,10 +1916,11 @@ namespace WindowSpy
             bool stopRequested = false;
             string stopReason = "";
             int n = nodes.Count;
-            var endFor = new int[n];
             var elseFor = new int[n];
-            BuildBranchMaps(nodes, endFor, elseFor);
-            var prevIf = new bool[n];           // 每次出现触发一次 模式的上一轮状态
+            var endFor = new int[n];
+            var loopEndFor = new int[n];
+            BuildBlockMaps(nodes, elseFor, endFor, loopEndFor);
+            var prevIf = new bool[n];
             IntPtr HwndOf(TargetType t) => t == TargetType.A ? hwndA : hwndB;
             bool reactNext = false;
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -1585,13 +1930,21 @@ namespace WindowSpy
                 {
                     int roundClicks = 0, roundHits = 0;
                     int i = 0;
+                    long stepsThisRound = 0;
+                    var loopStack = new System.Collections.Generic.List<(int start, int remain)>();
                     while (i < n && !_stopAll && !stopRequested)
                     {
+                        stepsThisRound++;
+                        if (stepsThisRound > 200000)
+                        {
+                            Dispatcher.Invoke(() => AppendLog("快捷操作：疑似跳转/循环死循环，强制结束本轮"));
+                            break;
+                        }
                         var nd = nodes[i];
                         switch (nd.Type)
                         {
                             case QuickNodeType.Click:
-                                roundClicks += FireClickNode(nd, HwndOf(nd.Target), reactNext);
+                                roundClicks += FireClickNode(nd, HwndOf(nd.Target), reactNext, opts.UseHumanTiming);
                                 reactNext = false;
                                 i++;
                                 break;
@@ -1642,10 +1995,35 @@ namespace WindowSpy
                                 break;
 
                             case QuickNodeType.Else:
-                                i = (endFor[i] >= 0 ? endFor[i] : n) + 1;   // 真分支跑完落到否则处 → 跳过否则块
+                                i = (endFor[i] >= 0 ? endFor[i] : n) + 1;   // 真分支落到否则 → 跳过否则块
                                 break;
 
-                            default: // End / 其它
+                            case QuickNodeType.LoopStart:
+                                loopStack.Add((i, Math.Max(1, nd.LoopCount)));
+                                i++;
+                                break;
+
+                            case QuickNodeType.LoopEnd:
+                                if (loopStack.Count > 0)
+                                {
+                                    var top = loopStack[loopStack.Count - 1];
+                                    if (top.remain > 1)
+                                    {
+                                        top.remain--;
+                                        loopStack[loopStack.Count - 1] = top;
+                                        i = top.start + 1;
+                                    }
+                                    else { loopStack.RemoveAt(loopStack.Count - 1); i++; }
+                                }
+                                else i++;
+                                break;
+
+                            case QuickNodeType.Jump:
+                                if (nd.JumpTarget >= 0 && nd.JumpTarget < n) i = nd.JumpTarget;
+                                else i++;
+                                break;
+
+                            default:   // End
                                 i++;
                                 break;
                         }
@@ -1694,16 +2072,30 @@ namespace WindowSpy
             }
         }
 
-        private int FireClickNode(QuickFlowNode nd, IntPtr hwnd, bool reactionDelay)
+        // 点击：人类化 走 HumanClicker；精细延迟 用节点自带延迟±随机/偏移/停留
+        private int FireClickNode(QuickFlowNode nd, IntPtr hwnd, bool reactionDelay, bool humanTiming)
         {
             int mn = Math.Max(1, nd.RepeatMin);
             int mx = Math.Max(mn, nd.RepeatMax);
             int count = _rng.Next(mn, mx + 1);
-            Thread.Sleep(reactionDelay ? HumanClicker.ReactionDelayMs() : HumanClicker.InterClickMs());
             if (NativeMethods.IsIconic(hwnd)) { NativeMethods.ShowWindow(hwnd, 9); Thread.Sleep(200); }
             var wrect = NativeMethods.GetRect(hwnd);
-            var center = new System.Drawing.Point(wrect.Left + nd.Point.X, wrect.Top + nd.Point.Y);
-            return HumanClicker.ClickBurst(hwnd, center, count);
+            if (humanTiming)
+            {
+                Thread.Sleep(reactionDelay ? HumanClicker.ReactionDelayMs() : HumanClicker.InterClickMs());
+                var center = new System.Drawing.Point(wrect.Left + nd.Point.X, wrect.Top + nd.Point.Y);
+                return HumanClicker.ClickBurst(hwnd, center, count);
+            }
+            // 精细延迟模式
+            Thread.Sleep(Math.Max(0, GetRandomVal(nd.DelayMs, nd.RandomDelay)));
+            int dwell = Math.Max(10, GetRandomVal(nd.DwellMs, nd.RandomDwell));
+            for (int k = 0; k < count; k++)
+            {
+                int offX = GetRandomVal(0, nd.RandomX);
+                int offY = GetRandomVal(0, nd.RandomY);
+                NativeMethods.ClickAtScreen(wrect.Left + nd.Point.X + offX, wrect.Top + nd.Point.Y + offY, dwell);
+            }
+            return count;
         }
 
         private string OcrRegion(IntPtr hwnd, QuickFlowNode nd)
@@ -1718,6 +2110,16 @@ namespace WindowSpy
                 Dispatcher.Invoke(() => AppendLog($"快捷操作：OCR 出错 {ex.Message}"));
                 return "";
             }
+        }
+
+        // 右侧队列随主 Tab 切换
+        private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            bool flow = MainTabs?.SelectedIndex == 0;
+            if (QueueFlowPanel != null) QueueFlowPanel.Visibility = flow ? Visibility.Visible : Visibility.Collapsed;
+            if (QueueStepsPanel != null) QueueStepsPanel.Visibility = flow ? Visibility.Collapsed : Visibility.Visible;
+            if (flow) RefreshFlowList(false);
+            else RefreshSteps();
         }
         private async void RunScriptB_Click(object sender, RoutedEventArgs e)
         {

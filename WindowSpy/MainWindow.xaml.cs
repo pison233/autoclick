@@ -29,8 +29,9 @@ namespace WindowSpy
         private System.Drawing.Rectangle? _rectB = null;
         private System.Drawing.Point? _clickA = null;
         private System.Drawing.Point? _clickB = null;
-        private System.Drawing.Rectangle? _autoBuyRect = null;
-        private System.Drawing.Point? _autoBuyPoint = null;
+        private readonly System.Collections.Generic.List<QuickFlowNode> _flowNodes = new();
+        private bool _syncingFlowEditor = false;
+        private bool _syncingCondEditor = false;
         private readonly OnnxOcrHelper _ocr = new();
         private volatile bool _stopAll = false;
         private bool _bindingHotkey = false;
@@ -904,147 +905,820 @@ namespace WindowSpy
         }
         private static readonly HumanTimingParams p0 = new HumanTimingParams();
 
-        private IntPtr DetectWindow() => AutoBuyDetectCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
-        private IntPtr ActWindow() => AutoBuyActCombo.SelectedIndex == 0 ? _boundAHwnd : _boundBHwnd;
+        // ============================
+        // 快捷操作：流程构建器（点击 / 检测(if)/否则/结束 + 多子条件 + 多停止条件）
+        // ============================
 
-        private void SelectAutoBuyRegion_Click(object sender, RoutedEventArgs e)
+        private int SelectedFlowIndex => QuickFlowList?.SelectedIndex ?? -1;
+
+        private void SyncButtonsAndEditor()
         {
-            IntPtr hwnd = DetectWindow();
-            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定检测窗口"); return; }
-            var overlay = new OverlaySelectWindow();
-            var ok = overlay.ShowDialog();
-            if (ok != true) return;
-            var sel = overlay.SelectedRect;
-            var wrect = NativeMethods.GetRect(hwnd);
-            var interLeft = Math.Max(wrect.Left, (int)sel.Left);
-            var interTop = Math.Max(wrect.Top, (int)sel.Top);
-            var interRight = Math.Min(wrect.Right, (int)(sel.Left + sel.Width));
-            var interBottom = Math.Min(wrect.Bottom, (int)(sel.Top + sel.Height));
-            if (interRight <= interLeft || interBottom <= interTop) { AppendLog("快捷操作：选择区域不在检测窗口内"); return; }
-            _autoBuyRect = System.Drawing.Rectangle.FromLTRB(
-                interLeft - wrect.Left, interTop - wrect.Top,
-                interRight - wrect.Left, interBottom - wrect.Top);
-            AutoBuyRegionText.Text = $"{_autoBuyRect.Value.Width}x{_autoBuyRect.Value.Height}";
-            AppendLog("快捷操作：已选择检测区域");
+            int idx = SelectedFlowIndex;
+            bool has = idx >= 0 && idx < _flowNodes.Count;
+            if (MoveUpButton != null) { MoveUpButton.IsEnabled = has && idx > 0; }
+            if (MoveDownButton != null) { MoveDownButton.IsEnabled = has && idx < _flowNodes.Count - 1; }
+            if (DeleteNodeButton != null) { DeleteNodeButton.IsEnabled = has; }
+            LoadEditorFromSelected();
         }
 
-        private void SelectAutoBuyButton_Click(object sender, RoutedEventArgs e)
+        private string FlowNodeLabel(QuickFlowNode n)
         {
-            IntPtr hwnd = ActWindow();
-            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定操作窗口"); return; }
+            string win = n.Target == TargetType.A ? "A" : "B";
+            switch (n.Type)
+            {
+                case QuickNodeType.Click:
+                    {
+                        string pt = n.Point.IsEmpty ? "未录点" : $"{n.Point.X},{n.Point.Y}";
+                        string rep = n.RepeatMin == n.RepeatMax ? n.RepeatMin.ToString() : $"{n.RepeatMin}~{n.RepeatMax}";
+                        return $"[点击] 窗口{win} ({pt}) ×{rep}";
+                    }
+                case QuickNodeType.If:
+                    {
+                        string rect = (n.Rect.Width > 0 && n.Rect.Height > 0) ? $"{n.Rect.Width}×{n.Rect.Height}" : "未选区";
+                        string trig = n.TriggerMode == CheckTriggerMode.EveryRound ? " [每轮都点]" : " [每次出现]";
+                        string stop = n.StopWhenTrue ? " [满足即停]" : "";
+                        return $"[检测] 窗口{win} 区{rect}{trig}{stop} 条件:{QuickFlowEval.DescribeConditions(n.Conditions)}";
+                    }
+                case QuickNodeType.Else: return "[否则]";
+                case QuickNodeType.End: return "[结束]";
+                default: return n.Type.ToString();
+            }
+        }
+
+        private void RefreshFlowList(bool reselectCurrent)
+        {
+            int keep = QuickFlowList.SelectedIndex;
+            QuickFlowList.SelectionChanged -= QuickFlowList_SelectionChanged;
+            QuickFlowList.Items.Clear();
+            int depth = 0;
+            for (int i = 0; i < _flowNodes.Count; i++)
+            {
+                var nd = _flowNodes[i];
+                int showDepth = depth;
+                if (nd.Type == QuickNodeType.End) { depth = Math.Max(0, depth - 1); showDepth = depth; }
+                else if (nd.Type == QuickNodeType.Else) { showDepth = Math.Max(0, depth - 1); }
+                else if (nd.Type == QuickNodeType.If) { depth++; }
+
+                string prefix = new string(' ', showDepth * 3);
+                QuickFlowList.Items.Add(new ListBoxItem { Content = $"{i + 1}. {prefix}{FlowNodeLabel(nd)}", FontSize = 12 });
+            }
+            if (reselectCurrent && keep >= 0 && keep < _flowNodes.Count) QuickFlowList.SelectedIndex = keep;
+            QuickFlowList.SelectionChanged += QuickFlowList_SelectionChanged;
+            SyncButtonsAndEditor();
+        }
+
+        private int InsertIndexAfterSelected() => SelectedFlowIndex >= 0 && SelectedFlowIndex < _flowNodes.Count ? SelectedFlowIndex + 1 : _flowNodes.Count;
+
+        private TargetType PreferredTarget()
+        {
+            if (_boundBHwnd != IntPtr.Zero && _boundAHwnd == IntPtr.Zero) return TargetType.B;
+            return TargetType.A;
+        }
+
+        private void AddFlowClick_Click(object sender, RoutedEventArgs e)
+        {
+            if (_boundAHwnd == IntPtr.Zero && _boundBHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定窗口A或B"); return; }
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.Click, Target = PreferredTarget(), RepeatMin = 1, RepeatMax = 1 });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加点击节点（第 {at + 1} 行）：在右侧重录点击位置");
+        }
+
+        private void AddFlowIf_Click(object sender, RoutedEventArgs e)
+        {
+            if (_boundAHwnd == IntPtr.Zero && _boundBHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定窗口A或B"); return; }
+            int at = InsertIndexAfterSelected();
+            var n = new QuickFlowNode { Type = QuickNodeType.If, Target = PreferredTarget() };
+            n.Conditions.Add(new FlowCondition { Kind = CheckConditionKind.HasContent });
+            _flowNodes.Insert(at, n);
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加检测(if)节点（第 {at + 1} 行）：框检测区域、写子条件；其后的行会成为真分支，直到 否则/结束");
+        }
+
+        private void AddFlowElse_Click(object sender, RoutedEventArgs e)
+        {
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.Else, Target = PreferredTarget() });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加否则(else)节点（第 {at + 1} 行）：对应最近一个未配对的检测(if)");
+        }
+
+        private void AddFlowEnd_Click(object sender, RoutedEventArgs e)
+        {
+            int at = InsertIndexAfterSelected();
+            _flowNodes.Insert(at, new QuickFlowNode { Type = QuickNodeType.End, Target = PreferredTarget() });
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = at;
+            AppendLog($"已添加结束(end)节点（第 {at + 1} 行）：关闭最近一个未配对的 if/否则");
+        }
+
+        private void QuickFlowList_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncButtonsAndEditor();
+
+        private void MoveFlowUp_Click(object sender, RoutedEventArgs e)
+        {
+            int i = SelectedFlowIndex;
+            if (i <= 0 || i >= _flowNodes.Count) return;
+            (_flowNodes[i - 1], _flowNodes[i]) = (_flowNodes[i], _flowNodes[i - 1]);
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = i - 1;
+        }
+
+        private void MoveFlowDown_Click(object sender, RoutedEventArgs e)
+        {
+            int i = SelectedFlowIndex;
+            if (i < 0 || i >= _flowNodes.Count - 1) return;
+            (_flowNodes[i], _flowNodes[i + 1]) = (_flowNodes[i + 1], _flowNodes[i]);
+            RefreshFlowList(false);
+            QuickFlowList.SelectedIndex = i + 1;
+        }
+
+        private void DeleteFlowNode_Click(object sender, RoutedEventArgs e)
+        {
+            int i = SelectedFlowIndex;
+            if (i < 0 || i >= _flowNodes.Count) return;
+            var n = _flowNodes[i];
+            _flowNodes.RemoveAt(i);
+            RefreshFlowList(false);
+            AppendLog($"已删除第 {i + 1} 行：{FlowNodeLabel(n)}");
+        }
+
+        // ---------- 节点编辑器同步 ----------
+
+        private void LoadEditorFromSelected()
+        {
+            int idx = SelectedFlowIndex;
+            bool has = idx >= 0 && idx < _flowNodes.Count;
+            if (FlowEditorEmptyHint != null) FlowEditorEmptyHint.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
+            if (FlowEditorFields != null) FlowEditorFields.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+            if (!has) return;
+
+            var n = _flowNodes[idx];
+            if (FlowEditorTitle != null)
+                FlowEditorTitle.Text = $"编辑选中节点（第 {idx + 1} 行）";
+
+            _syncingFlowEditor = true;
+            try
+            {
+                bool isMark = n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End;
+                if (EditorTargetRow != null) EditorTargetRow.Visibility = isMark ? Visibility.Collapsed : Visibility.Visible;
+                if (FlowClickEditor != null) FlowClickEditor.Visibility = n.Type == QuickNodeType.Click ? Visibility.Visible : Visibility.Collapsed;
+                if (FlowIfEditor != null) FlowIfEditor.Visibility = n.Type == QuickNodeType.If ? Visibility.Visible : Visibility.Collapsed;
+                if (FlowMarkEditor != null) FlowMarkEditor.Visibility = isMark ? Visibility.Visible : Visibility.Collapsed;
+                if (EditTargetCombo != null) EditTargetCombo.SelectedIndex = n.Target == TargetType.B ? 1 : 0;
+
+                if (n.Type == QuickNodeType.Click)
+                {
+                    if (EditRepeatMin != null) EditRepeatMin.Text = n.RepeatMin.ToString();
+                    if (EditRepeatMax != null) EditRepeatMax.Text = n.RepeatMax.ToString();
+                    if (EditPointText != null) EditPointText.Text = n.Point.IsEmpty ? "未选择" : $"{n.Point.X},{n.Point.Y}";
+                }
+                else if (n.Type == QuickNodeType.If)
+                {
+                    if (EditRectText != null)
+                        EditRectText.Text = (n.Rect.Width > 0 && n.Rect.Height > 0)
+                            ? $"区域已录：{n.Rect.X},{n.Rect.Y}  {n.Rect.Width}x{n.Rect.Height}" : "未选择区域";
+                    if (EditRectTestText != null) { EditRectTestText.Text = ""; }
+                    if (EditTrigEveryRound != null) EditTrigEveryRound.IsChecked = n.TriggerMode != CheckTriggerMode.OncePerAppearance;
+                    if (EditTrigOnce != null) EditTrigOnce.IsChecked = n.TriggerMode == CheckTriggerMode.OncePerAppearance;
+                    if (EditStopWhenTrueCheck != null) EditStopWhenTrueCheck.IsChecked = n.StopWhenTrue;
+                    if (n.Conditions.Count == 0) n.Conditions.Add(new FlowCondition { Kind = CheckConditionKind.HasContent });
+                    RefreshCondList();
+                }
+            }
+            finally { _syncingFlowEditor = false; }
+        }
+
+        private void CommitEditorToSelected()
+        {
+            int idx = SelectedFlowIndex;
+            if (idx < 0 || idx >= _flowNodes.Count) return;
+            var n = _flowNodes[idx];
+            if (n.Type == QuickNodeType.Else || n.Type == QuickNodeType.End) return;
+            if (EditTargetCombo != null) n.Target = EditTargetCombo.SelectedIndex == 1 ? TargetType.B : TargetType.A;
+            if (n.Type == QuickNodeType.Click)
+            {
+                int mn = ClampInt(ParseInt(EditRepeatMin?.Text, 1), 1, 100);
+                int mx = ClampInt(ParseInt(EditRepeatMax?.Text, mn), mn, 100);
+                n.RepeatMin = mn; n.RepeatMax = mx;
+            }
+            else if (n.Type == QuickNodeType.If)
+            {
+                n.TriggerMode = EditTrigOnce?.IsChecked == true ? CheckTriggerMode.OncePerAppearance : CheckTriggerMode.EveryRound;
+                n.StopWhenTrue = EditStopWhenTrueCheck?.IsChecked == true;
+            }
+        }
+
+        private void EditNode_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingFlowEditor) return;
+            CommitEditorToSelected();
+            RefreshFlowList(true);
+        }
+
+        private void EditNode_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_syncingFlowEditor) return;
+            CommitEditorToSelected();
+            RefreshFlowList(true);
+        }
+
+        private void EditNode_Click(object sender, RoutedEventArgs e)
+        {
+            if (_syncingFlowEditor) return;
+            CommitEditorToSelected();
+            RefreshFlowList(true);
+        }
+
+        private void EditTriggerRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_syncingFlowEditor) return;
+            CommitEditorToSelected();
+            RefreshFlowList(true);
+        }
+
+        private void ReRecordFlowPoint_Click(object sender, RoutedEventArgs e)
+        {
+            int idx = SelectedFlowIndex;
+            if (idx < 0 || idx >= _flowNodes.Count) return;
+            var n = _flowNodes[idx];
+            IntPtr hwnd = n.Target == TargetType.A ? _boundAHwnd : _boundBHwnd;
+            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定该窗口"); return; }
             var picker = new OverlayPickWindow();
-            var ok = picker.ShowDialog();
-            if (ok == true)
+            if (picker.ShowDialog() == true)
             {
                 var wrect = NativeMethods.GetRect(hwnd);
                 int sx = (int)picker.ClickPoint.X;
                 int sy = (int)picker.ClickPoint.Y;
                 if (sx < wrect.Left || sy < wrect.Top || sx >= wrect.Right || sy >= wrect.Bottom)
-                { AppendLog("快捷操作：操作位置不在操作窗口内"); return; }
-                _autoBuyPoint = new System.Drawing.Point(sx - wrect.Left, sy - wrect.Top);
-                AutoBuyButtonText.Text = $"{_autoBuyPoint.Value.X},{_autoBuyPoint.Value.Y}";
-                AppendLog("快捷操作：已选择操作位置");
+                { AppendLog("快捷操作：位置不在该窗口内，请重试"); return; }
+                n.Point = new System.Drawing.Point(sx - wrect.Left, sy - wrect.Top);
+                if (EditPointText != null) EditPointText.Text = $"{n.Point.X},{n.Point.Y}";
+                RefreshFlowList(true);
+                AppendLog($"快捷操作：已记录点击位置 {n.Point.X},{n.Point.Y}");
             }
         }
 
-        private async void StartAutoBuy_Click(object sender, RoutedEventArgs e)
+        private void ReRecordFlowRect_Click(object sender, RoutedEventArgs e)
+        {
+            int idx = SelectedFlowIndex;
+            if (idx < 0 || idx >= _flowNodes.Count) return;
+            var n = _flowNodes[idx];
+            IntPtr hwnd = n.Target == TargetType.A ? _boundAHwnd : _boundBHwnd;
+            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定该窗口"); return; }
+            var overlay = new OverlaySelectWindow();
+            if (overlay.ShowDialog() == true)
+            {
+                var sel = overlay.SelectedRect;
+                var wrect = NativeMethods.GetRect(hwnd);
+                var il = Math.Max(wrect.Left, (int)sel.Left);
+                var it = Math.Max(wrect.Top, (int)sel.Top);
+                var ir = Math.Min(wrect.Right, (int)(sel.Left + sel.Width));
+                var ib = Math.Min(wrect.Bottom, (int)(sel.Top + sel.Height));
+                if (ir <= il || ib <= it) { AppendLog("快捷操作：选择区域不在该窗口内，请重试"); return; }
+                n.Rect = System.Drawing.Rectangle.FromLTRB(il - wrect.Left, it - wrect.Top, ir - wrect.Left, ib - wrect.Top);
+                if (EditRectText != null) EditRectText.Text = $"区域已录：{n.Rect.X},{n.Rect.Y}  {n.Rect.Width}x{n.Rect.Height}";
+                if (EditRectTestText != null) EditRectTestText.Text = "";
+                RefreshFlowList(true);
+                AppendLog($"快捷操作：已记录检测区域 {n.Rect.Width}x{n.Rect.Height}");
+            }
+        }
+
+        // 对选中检测节点区域做一次 OCR 测试（后台执行）
+        private async void TestFlowRegion_Click(object sender, RoutedEventArgs e)
+        {
+            int idx = SelectedFlowIndex;
+            if (idx < 0 || idx >= _flowNodes.Count) return;
+            var n = _flowNodes[idx];
+            if (_isRunning) { AppendLog("快捷操作：运行时不能测试识别"); return; }
+            IntPtr hwnd = n.Target == TargetType.A ? _boundAHwnd : _boundBHwnd;
+            if (hwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定该窗口"); return; }
+            if (n.Rect.Width <= 0 || n.Rect.Height <= 0) { AppendLog("快捷操作：请先记录检测区域"); return; }
+            var rect = n.Rect;
+            if (TestFlowRegionButton != null) { TestFlowRegionButton.IsEnabled = false; TestFlowRegionButton.Content = "识别中..."; }
+            string text = "";
+            try { text = await System.Threading.Tasks.Task.Run(() => CaptureAndOcrRegion(hwnd, rect, false)); }
+            catch (Exception ex) { text = ""; AppendLog($"快捷操作：测试识别出错 {ex.Message}"); }
+            bool empty = string.IsNullOrWhiteSpace(text);
+            if (EditRectTestText != null)
+            {
+                EditRectTestText.Text = empty ? "未识别到数据（可改用“区域出现文字/为空”等条件或换区域）" : $"识别到：{text}";
+                EditRectTestText.Foreground = empty ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
+            }
+            AppendLog($"快捷操作：测试识别 => {(empty ? "未识别到数据" : text)}");
+            if (TestFlowRegionButton != null) { TestFlowRegionButton.IsEnabled = true; TestFlowRegionButton.Content = "测试识别"; }
+        }
+
+        // ---------- 检测节点子条件编辑 ----------
+
+        private int SelectedCondIndex => FlowCondList?.SelectedIndex ?? -1;
+
+        private QuickFlowNode? CurrentIfNode()
+        {
+            int idx = SelectedFlowIndex;
+            if (idx < 0 || idx >= _flowNodes.Count) return null;
+            var n = _flowNodes[idx];
+            return n.Type == QuickNodeType.If ? n : null;
+        }
+
+        private void RefreshCondList()
+        {
+            var n = CurrentIfNode();
+            int keep = FlowCondList.SelectedIndex;
+            FlowCondList.SelectionChanged -= FlowCondList_SelectionChanged;
+            FlowCondList.Items.Clear();
+            if (n != null)
+            {
+                for (int i = 0; i < n.Conditions.Count; i++)
+                {
+                    var c = n.Conditions[i];
+                    string pre = i == 0 ? "当 " : (c.Conj == ConjType.Or ? "或 " : "且 ");
+                    FlowCondList.Items.Add(new ListBoxItem { Content = $"{i + 1}. {pre}{QuickFlowEval.DescribeCond(c)}", FontSize = 12 });
+                }
+                if (keep >= 0 && keep < n.Conditions.Count) FlowCondList.SelectedIndex = keep;
+            }
+            FlowCondList.SelectionChanged += FlowCondList_SelectionChanged;
+            SyncCondUI();
+        }
+
+        private void SyncCondUI()
+        {
+            var n = CurrentIfNode();
+            bool has = n != null;
+            int ci = SelectedCondIndex;
+            bool valid = has && ci >= 0 && ci < n!.Conditions.Count;
+            if (DelFlowCondButton != null) DelFlowCondButton.IsEnabled = valid;
+            if (FlowCondDetail != null) FlowCondDetail.Visibility = valid ? Visibility.Visible : Visibility.Collapsed;
+            if (valid) LoadCondDetail(n!.Conditions[ci], ci);
+        }
+
+        private void LoadCondDetail(FlowCondition c, int ci)
+        {
+            _syncingCondEditor = true;
+            try
+            {
+                if (CondConjCombo != null)
+                {
+                    CondConjCombo.SelectedIndex = c.Conj == ConjType.Or ? 1 : 0;
+                    CondConjCombo.IsEnabled = ci > 0;
+                }
+                if (CondKindCombo != null) CondKindCombo.SelectedIndex = (int)c.Kind;
+                RefreshCondSubPanels();
+                if (CondNumOpCombo != null) CondNumOpCombo.SelectedIndex = (int)c.NumOp;
+                if (CondNumValue != null) CondNumValue.Text = c.NumThreshold.ToString();
+                if (CondTextOpCombo != null) CondTextOpCombo.SelectedIndex = c.TextOp == TextMatchOp.Equal ? 0 : 1;
+                if (CondTextValue != null) CondTextValue.Text = c.TextValue;
+            }
+            finally { _syncingCondEditor = false; }
+        }
+
+        private void CommitCondDetail()
+        {
+            var n = CurrentIfNode();
+            int ci = SelectedCondIndex;
+            if (n == null || ci < 0 || ci >= n.Conditions.Count) return;
+            var c = n.Conditions[ci];
+            if (CondConjCombo != null && ci > 0) c.Conj = CondConjCombo.SelectedIndex == 1 ? ConjType.Or : ConjType.And;
+            if (CondKindCombo != null) c.Kind = (CheckConditionKind)ClampInt(CondKindCombo.SelectedIndex, 0, 3);
+            if (c.Kind == CheckConditionKind.NumCompare)
+            {
+                if (CondNumOpCombo != null) c.NumOp = (NumCompareOp)ClampInt(CondNumOpCombo.SelectedIndex, 0, 4);
+                c.NumThreshold = ParseInt(CondNumValue?.Text, 0);
+            }
+            else if (c.Kind == CheckConditionKind.TextMatch)
+            {
+                c.TextOp = CondTextOpCombo?.SelectedIndex == 0 ? TextMatchOp.Equal : TextMatchOp.Contains;
+                c.TextValue = CondTextValue?.Text ?? "";
+            }
+        }
+
+        private void RefreshCondSubPanels()
+        {
+            int kind = CondKindCombo?.SelectedIndex ?? -1;
+            if (CondNumPanel != null) CondNumPanel.Visibility = kind == 2 ? Visibility.Visible : Visibility.Collapsed;
+            if (CondTextPanel != null) CondTextPanel.Visibility = kind == 3 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void FlowCondList_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncCondUI();
+
+        private void CondSub_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingCondEditor) return;
+            CommitCondDetail();
+            RefreshCondSubPanels();
+            RefreshCondList();
+        }
+
+        private void CondSub_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_syncingCondEditor) return;
+            CommitCondDetail();
+            RefreshCondList();
+        }
+
+        private void AddFlowCond_Click(object sender, RoutedEventArgs e)
+        {
+            var n = CurrentIfNode();
+            if (n == null) return;
+            n.Conditions.Add(new FlowCondition { Kind = CheckConditionKind.HasContent });
+            RefreshCondList();
+            FlowCondList.SelectedIndex = n.Conditions.Count - 1;
+        }
+
+        private void DelFlowCond_Click(object sender, RoutedEventArgs e)
+        {
+            var n = CurrentIfNode();
+            int ci = SelectedCondIndex;
+            if (n == null || ci < 0 || ci >= n.Conditions.Count) return;
+            if (n.Conditions.Count <= 1) { AppendLog("至少保留一条子条件"); return; }
+            n.Conditions.RemoveAt(ci);
+            RefreshCondList();
+            RefreshFlowList(true);
+        }
+
+        // ---------- 停止条件 / 其它 ----------
+
+        private void StopToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (StopClicksBox != null) StopClicksBox.IsEnabled = StopUseClicksCheck?.IsChecked == true;
+            if (StopTriggersBox != null) StopTriggersBox.IsEnabled = StopUseTriggersCheck?.IsChecked == true;
+            if (StopRoundsBox != null) StopRoundsBox.IsEnabled = StopUseRoundsCheck?.IsChecked == true;
+            if (StopMinutesBox != null) StopMinutesBox.IsEnabled = StopUseMinutesCheck?.IsChecked == true;
+        }
+
+        private void DecimalOnly_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            var tb = sender as System.Windows.Controls.TextBox;
+            string t = (tb?.Text ?? "") + e.Text;
+            foreach (char c in e.Text)
+            {
+                if (!char.IsDigit(c) && c != '.') { e.Handled = true; return; }
+            }
+            if (t.IndexOf('.') != t.LastIndexOf('.')) e.Handled = true;
+        }
+
+        private static double ParseDouble(string? s, double def)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return def;
+            return double.TryParse(s, out var v) ? v : def;
+        }
+
+        // ---------- 保存 / 加载 ----------
+
+        private string FlowSaveDir => System.IO.Path.Combine(_savedQueuesDir, "QuickFlows");
+
+        private void EnsureFlowDir()
+        {
+            try { if (!System.IO.Directory.Exists(FlowSaveDir)) System.IO.Directory.CreateDirectory(FlowSaveDir); } catch { }
+        }
+
+        private QuickFlowStopDto ReadStopDto()
+        {
+            return new QuickFlowStopDto
+            {
+                UseClicks = StopUseClicksCheck?.IsChecked == true,
+                Clicks = ParseInt(StopClicksBox?.Text, 0),
+                UseTriggers = StopUseTriggersCheck?.IsChecked == true,
+                Triggers = ParseInt(StopTriggersBox?.Text, 0),
+                UseRounds = StopUseRoundsCheck?.IsChecked == true,
+                Rounds = ParseInt(StopRoundsBox?.Text, 0),
+                UseMinutes = StopUseMinutesCheck?.IsChecked == true,
+                Minutes = ParseDouble(StopMinutesBox?.Text, 0),
+            };
+        }
+
+        private void SaveFlow_Click(object sender, RoutedEventArgs e)
+        {
+            EnsureFlowDir();
+            var dlg = new SaveFileDialog();
+            dlg.Filter = "JSON 文件|*.json";
+            dlg.FileName = "quickflow.json";
+            dlg.InitialDirectory = FlowSaveDir;
+            if (dlg.ShowDialog() == true)
+            {
+                var fileData = new QuickFlowFileDto
+                {
+                    Nodes = _flowNodes.Select(QuickFlowMapper.ToDto).ToList(),
+                    Stop = ReadStopDto(),
+                };
+                var json = JsonSerializer.Serialize(fileData, new JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(dlg.FileName, json);
+                AppendLog($"已保存流程：{dlg.FileName}");
+            }
+        }
+
+        private void LoadFlow_Click(object sender, RoutedEventArgs e)
+        {
+            EnsureFlowDir();
+            var dlg = new OpenFileDialog();
+            dlg.Filter = "JSON 文件|*.json";
+            dlg.InitialDirectory = FlowSaveDir;
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var fileData = JsonSerializer.Deserialize<QuickFlowFileDto>(System.IO.File.ReadAllText(dlg.FileName));
+                if (fileData == null) { AppendLog("加载流程失败：文件为空"); return; }
+                _flowNodes.Clear();
+                if (fileData.Nodes != null)
+                    foreach (var d in fileData.Nodes) _flowNodes.Add(QuickFlowMapper.FromDto(d));
+
+                _syncingFlowEditor = true;
+                try
+                {
+                    var s = fileData.Stop ?? new QuickFlowStopDto();
+                    if (StopUseClicksCheck != null) StopUseClicksCheck.IsChecked = s.UseClicks;
+                    if (StopClicksBox != null) { StopClicksBox.Text = s.Clicks.ToString(); StopClicksBox.IsEnabled = s.UseClicks; }
+                    if (StopUseTriggersCheck != null) StopUseTriggersCheck.IsChecked = s.UseTriggers;
+                    if (StopTriggersBox != null) { StopTriggersBox.Text = s.Triggers.ToString(); StopTriggersBox.IsEnabled = s.UseTriggers; }
+                    if (StopUseRoundsCheck != null) StopUseRoundsCheck.IsChecked = s.UseRounds;
+                    if (StopRoundsBox != null) { StopRoundsBox.Text = s.Rounds.ToString(); StopRoundsBox.IsEnabled = s.UseRounds; }
+                    if (StopUseMinutesCheck != null) StopUseMinutesCheck.IsChecked = s.UseMinutes;
+                    if (StopMinutesBox != null) { StopMinutesBox.Text = s.Minutes.ToString("0.##"); StopMinutesBox.IsEnabled = s.UseMinutes; }
+                }
+                finally { _syncingFlowEditor = false; }
+
+                RefreshFlowList(false);
+                AppendLog($"已加载流程：{dlg.FileName}（{_flowNodes.Count} 个节点）");
+            }
+            catch (Exception ex)
+            {
+                AppendLog("加载流程失败：" + ex.Message);
+            }
+        }
+
+        // ---------- 运行 ----------
+
+        private void SetFlowEditingEnabled(bool en)
+        {
+            if (QuickFlowList != null) QuickFlowList.IsEnabled = en;
+            if (AddFlowClickButton != null) AddFlowClickButton.IsEnabled = en;
+            if (AddFlowIfButton != null) AddFlowIfButton.IsEnabled = en;
+            if (AddFlowElseButton != null) AddFlowElseButton.IsEnabled = en;
+            if (AddFlowEndButton != null) AddFlowEndButton.IsEnabled = en;
+            if (SaveFlowButton != null) SaveFlowButton.IsEnabled = en;
+            if (LoadFlowButton != null) LoadFlowButton.IsEnabled = en;
+            if (MoveUpButton != null) MoveUpButton.IsEnabled = en && SelectedFlowIndex > 0;
+            if (MoveDownButton != null) MoveDownButton.IsEnabled = en && SelectedFlowIndex >= 0 && SelectedFlowIndex < _flowNodes.Count - 1;
+            if (DeleteNodeButton != null) DeleteNodeButton.IsEnabled = en && SelectedFlowIndex >= 0;
+            if (FlowEditorPanel != null) FlowEditorPanel.IsEnabled = en;
+        }
+
+        // 结构校验：if/否则/结束 嵌套配对
+        private string? ValidateStructure(System.Collections.Generic.List<QuickFlowNode> nodes)
+        {
+            int depth = 0;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var nd = nodes[i];
+                if (nd.Type == QuickNodeType.If) depth++;
+                else if (nd.Type == QuickNodeType.Else) { if (depth <= 0) return $"第 {i + 1} 行「否则」前没有未配对的检测(if)"; }
+                else if (nd.Type == QuickNodeType.End)
+                {
+                    if (depth <= 0) return $"第 {i + 1} 行「结束」多余（没有与之配对的检测）";
+                    depth--;
+                }
+            }
+            if (depth > 0) return $"有 {depth} 个检测(if) 缺少「结束」";
+            return null;
+        }
+
+        private void BuildBranchMaps(System.Collections.Generic.List<QuickFlowNode> nodes, int[] endFor, int[] elseFor)
+        {
+            int n = nodes.Count;
+            for (int i = 0; i < n; i++) { endFor[i] = -1; elseFor[i] = -1; }
+            for (int i = 0; i < n; i++)
+            {
+                if (nodes[i].Type != QuickNodeType.If && nodes[i].Type != QuickNodeType.Else) continue;
+                int depth = 0;
+                bool foundElse = false;
+                for (int j = i + 1; j < n; j++)
+                {
+                    var t = nodes[j].Type;
+                    if (t == QuickNodeType.If) depth++;
+                    else if (t == QuickNodeType.Else) { if (depth == 0 && nodes[i].Type == QuickNodeType.If && !foundElse) { elseFor[i] = j; foundElse = true; } }
+                    else if (t == QuickNodeType.End)
+                    {
+                        if (depth == 0) { endFor[i] = j; break; }
+                        depth--;
+                    }
+                }
+            }
+        }
+
+        private sealed class FlowRunOptions
+        {
+            public bool UseClicks; public int StopClicks;
+            public bool UseTriggers; public int StopTriggers;
+            public bool UseRounds; public int StopRounds;
+            public bool UseMinutes; public double StopMinutes;
+        }
+
+        private async void StartFlow_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning) { AppendLog("快捷操作：已在运行"); return; }
-            IntPtr detectHwnd = DetectWindow();
-            IntPtr actHwnd = ActWindow();
-            if (detectHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定检测窗口"); return; }
-            if (actHwnd == IntPtr.Zero) { AppendLog("快捷操作：请先绑定操作窗口"); return; }
-            if (_autoBuyRect == null) { AppendLog("快捷操作：请先选择检测区域"); return; }
-            if (_autoBuyPoint == null) { AppendLog("快捷操作：请先选择操作位置"); return; }
 
-            int burstMin = ClampInt(ParseInt(AutoBuyBurstMin?.Text, 3), 1, 100);
-            int burstMax = ClampInt(ParseInt(AutoBuyBurstMax?.Text, 5), 1, 100);
-            if (burstMax < burstMin) (burstMin, burstMax) = (burstMax, burstMin);
-            HumanClicker.SetBurstRange(burstMin, burstMax);
+            var errors = new System.Collections.Generic.List<string>();
+            if (_flowNodes.Count == 0) errors.Add("流程为空");
+            var structErr = ValidateStructure(_flowNodes);
+            if (structErr != null) errors.Add(structErr);
+            if (errors.Count == 0)
+            {
+                for (int i = 0; i < _flowNodes.Count; i++)
+                {
+                    var n = _flowNodes[i];
+                    IntPtr h = n.Target == TargetType.A ? _boundAHwnd : _boundBHwnd;
+                    if ((n.Type == QuickNodeType.Click || n.Type == QuickNodeType.If) && h == IntPtr.Zero)
+                    { errors.Add($"第 {i + 1} 行所在窗口{n.Target}未绑定"); break; }
+                    if (n.Type == QuickNodeType.Click && n.Point.IsEmpty)
+                    { errors.Add($"第 {i + 1} 行点击节点未记录位置"); break; }
+                    if (n.Type == QuickNodeType.If)
+                    {
+                        if (n.Rect.Width <= 0 || n.Rect.Height <= 0) { errors.Add($"第 {i + 1} 行检测(if)节点未记录区域"); break; }
+                        if (n.Conditions.Count == 0) { errors.Add($"第 {i + 1} 行检测(if)节点没有子条件"); break; }
+                        bool hasTextNeeded = n.Conditions.Any(c => c.Kind == CheckConditionKind.TextMatch && string.IsNullOrWhiteSpace(c.TextValue));
+                        if (hasTextNeeded) { errors.Add($"第 {i + 1} 行存在“文本匹配”子条件但未填目标文字"); break; }
+                    }
+                }
+            }
+            if (errors.Count > 0) { AppendLog("快捷操作：无法开始 - " + string.Join("；", errors)); return; }
+
             ApplyTimingConfig();
+            var nodes = _flowNodes.Select(x => x.Clone()).ToList();
+            IntPtr hwndA = _boundAHwnd, hwndB = _boundBHwnd;
 
-            int targetClicks = ParseInt(AutoBuyTargetClicks?.Text, 0);
-            int maxMinutes = ParseInt(AutoBuyMaxMinutes?.Text, 0);
+            var stopDto = ReadStopDto();
+            var opts = new FlowRunOptions();
+            opts.UseClicks = stopDto.UseClicks && stopDto.Clicks > 0; opts.StopClicks = stopDto.Clicks;
+            opts.UseTriggers = stopDto.UseTriggers && stopDto.Triggers > 0; opts.StopTriggers = stopDto.Triggers;
+            opts.UseRounds = stopDto.UseRounds && stopDto.Rounds > 0; opts.StopRounds = stopDto.Rounds;
+            opts.UseMinutes = stopDto.UseMinutes && stopDto.Minutes > 0; opts.StopMinutes = stopDto.Minutes;
 
             _stopAll = false;
             _isRunning = true;
             DoRegisterHotkey();
             InstallHook();
-            StartAutoBuyButton.Content = "运行中...";
-            AutoBuyStatusText.Text = "运行中";
+            SetFlowEditingEnabled(false);
+            StartFlowButton.Content = "运行中...";
+            FlowStatusText.Text = "运行中";
 
-            var rect = _autoBuyRect.Value;
-            var point = _autoBuyPoint.Value;
-
-            await System.Threading.Tasks.Task.Run(() =>
-            {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                int totalClicks = 0, groupCount = 0;
-                bool armed = true;
-                try
-                {
-                    while (!_stopAll)
-                    {
-                        string text = "";
-                        try { text = CaptureAndOcrRegion(detectHwnd, rect, true); }
-                        catch (Exception ex)
-                        {
-                            Dispatcher.Invoke(() => AppendLog($"快捷操作：OCR 出错 {ex.Message}"));
-                            Thread.Sleep(500);
-                            continue;
-                        }
-                        bool hasSignal = !string.IsNullOrEmpty(text);
-
-                        if (armed && hasSignal)
-                        {
-                            armed = false;
-                            Thread.Sleep(HumanClicker.ReactionDelayMs());
-                            var wrect = NativeMethods.GetRect(actHwnd);
-                            var screenPt = new System.Drawing.Point(wrect.Left + point.X, wrect.Top + point.Y);
-                            int n = HumanClicker.ClickBurst(actHwnd, screenPt);
-                            totalClicks += n;
-                            groupCount++;
-                            HumanClicker.MaybeCheckRecords(1);
-                            Dispatcher.Invoke(() =>
-                            {
-                                AppendLog($"快捷操作：检测到({text})，操作 {n} 次，累计 {totalClicks}");
-                                AutoBuyStatusText.Text = $"运行中：累计 {totalClicks}";
-                            });
-                        }
-                        else if (!hasSignal)
-                        {
-                            armed = true; // 信号消失 → 重新武装（一次信号只触发一次）
-                        }
-
-                        if (targetClicks > 0 && totalClicks >= targetClicks)
-                        {
-                            Dispatcher.Invoke(() => AppendLog($"快捷操作：已达目标 {targetClicks} 次，停止"));
-                            break;
-                        }
-                        if (maxMinutes > 0 && sw.Elapsed.TotalMinutes >= maxMinutes)
-                        {
-                            Dispatcher.Invoke(() => AppendLog($"快捷操作：已达最长运行 {maxMinutes} 分钟，停止"));
-                            break;
-                        }
-
-                        Thread.Sleep(HumanClicker.NextScanWaitMs());
-                    }
-                }
-                finally
-                {
-                    _isRunning = false;
-                    Dispatcher.Invoke(() =>
-                    {
-                        UnregisterStopHotkey();
-                        StartAutoBuyButton.Content = "开始执行";
-                        AutoBuyStatusText.Text = _stopAll ? "已停止" : "已结束";
-                    });
-                    UninstallHook();
-                    Dispatcher.Invoke(() => AppendLog("快捷操作结束"));
-                }
-            });
+            await System.Threading.Tasks.Task.Run(() => RunFlowEngine(nodes, hwndA, hwndB, opts));
         }
 
+        private void RunFlowEngine(System.Collections.Generic.List<QuickFlowNode> nodes, IntPtr hwndA, IntPtr hwndB, FlowRunOptions opts)
+        {
+            int totalClicks = 0, totalHits = 0, totalRounds = 0;
+            bool stopRequested = false;
+            string stopReason = "";
+            int n = nodes.Count;
+            var endFor = new int[n];
+            var elseFor = new int[n];
+            BuildBranchMaps(nodes, endFor, elseFor);
+            var prevIf = new bool[n];           // 每次出现触发一次 模式的上一轮状态
+            IntPtr HwndOf(TargetType t) => t == TargetType.A ? hwndA : hwndB;
+            bool reactNext = false;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                while (!_stopAll && !stopRequested)
+                {
+                    int roundClicks = 0, roundHits = 0;
+                    int i = 0;
+                    while (i < n && !_stopAll && !stopRequested)
+                    {
+                        var nd = nodes[i];
+                        switch (nd.Type)
+                        {
+                            case QuickNodeType.Click:
+                                roundClicks += FireClickNode(nd, HwndOf(nd.Target), reactNext);
+                                reactNext = false;
+                                i++;
+                                break;
+
+                            case QuickNodeType.If:
+                                {
+                                    string text = OcrRegion(HwndOf(nd.Target), nd);
+                                    bool cur = QuickFlowEval.EvaluateConditions(nd.Conditions, text);
+                                    if (nd.StopWhenTrue && cur)
+                                    {
+                                        stopRequested = true;
+                                        stopReason = $"第 {i + 1} 行检测满足({QuickFlowEval.DescribeConditions(nd.Conditions)}) → 停止信号";
+                                        break;
+                                    }
+                                    bool runThen = false, runElse = false;
+                                    if (nd.TriggerMode == CheckTriggerMode.EveryRound)
+                                    {
+                                        if (cur) runThen = true;
+                                        else if (elseFor[i] >= 0) runElse = true;
+                                    }
+                                    else
+                                    {
+                                        bool prev = prevIf[i];
+                                        if (!prev && cur) runThen = true;
+                                        else if (prev && !cur && elseFor[i] >= 0) runElse = true;
+                                        prevIf[i] = cur;
+                                    }
+                                    if (runThen)
+                                    {
+                                        roundHits++;
+                                        if (text.Length > 0)
+                                            Dispatcher.Invoke(() => AppendLog($"快捷操作：第 {i + 1} 行检测满足({QuickFlowEval.DescribeConditions(nd.Conditions)})，OCR={text}，走真分支"));
+                                        i = i + 1;
+                                        reactNext = true;
+                                    }
+                                    else if (runElse)
+                                    {
+                                        if (text.Length > 0)
+                                            Dispatcher.Invoke(() => AppendLog($"快捷操作：第 {i + 1} 行检测不满足({QuickFlowEval.DescribeConditions(nd.Conditions)})，OCR={text}，走否则"));
+                                        i = elseFor[i] + 1;
+                                        reactNext = true;
+                                    }
+                                    else
+                                    {
+                                        i = (endFor[i] >= 0 ? endFor[i] : n) + 1;
+                                    }
+                                }
+                                break;
+
+                            case QuickNodeType.Else:
+                                i = (endFor[i] >= 0 ? endFor[i] : n) + 1;   // 真分支跑完落到否则处 → 跳过否则块
+                                break;
+
+                            default: // End / 其它
+                                i++;
+                                break;
+                        }
+                    }
+
+                    totalRounds++;
+                    totalClicks += roundClicks;
+                    totalHits += roundHits;
+                    if (roundClicks > 0) HumanClicker.MaybeCheckRecords(1);
+                    if (stopRequested)
+                    {
+                        Dispatcher.Invoke(() => AppendLog($"快捷操作：{stopReason}，停止"));
+                        break;
+                    }
+                    if (roundClicks > 0 || roundHits > 0)
+                        Dispatcher.Invoke(() => FlowStatusText.Text = $"运行中：点击 {totalClicks}｜命中 {totalHits}｜轮 {totalRounds}");
+
+                    if (opts.UseClicks && totalClicks >= opts.StopClicks)
+                    { Dispatcher.Invoke(() => AppendLog($"快捷操作：已达点击数 {opts.StopClicks}，停止")); break; }
+                    if (opts.UseTriggers && totalHits >= opts.StopTriggers)
+                    { Dispatcher.Invoke(() => AppendLog($"快捷操作：已达命中次数 {opts.StopTriggers}，停止")); break; }
+                    if (opts.UseRounds && totalRounds >= opts.StopRounds)
+                    { Dispatcher.Invoke(() => AppendLog($"快捷操作：已达轮数 {opts.StopRounds}，停止")); break; }
+                    if (opts.UseMinutes && sw.Elapsed.TotalMinutes >= opts.StopMinutes)
+                    { Dispatcher.Invoke(() => AppendLog($"快捷操作：已达运行时长 {opts.StopMinutes:0.##} 分钟，停止")); break; }
+
+                    Thread.Sleep(HumanClicker.NextScanWaitMs());
+                }
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() => AppendLog($"快捷操作：流程异常 {ex.Message}"));
+            }
+            finally
+            {
+                _isRunning = false;
+                Dispatcher.Invoke(() =>
+                {
+                    UnregisterStopHotkey();
+                    SetFlowEditingEnabled(true);
+                    if (StartFlowButton != null) StartFlowButton.Content = "开始执行";
+                    if (FlowStatusText != null) FlowStatusText.Text = _stopAll ? "已停止" : "已结束";
+                    AppendLog("流程执行结束");
+                });
+                UninstallHook();
+            }
+        }
+
+        private int FireClickNode(QuickFlowNode nd, IntPtr hwnd, bool reactionDelay)
+        {
+            int mn = Math.Max(1, nd.RepeatMin);
+            int mx = Math.Max(mn, nd.RepeatMax);
+            int count = _rng.Next(mn, mx + 1);
+            Thread.Sleep(reactionDelay ? HumanClicker.ReactionDelayMs() : HumanClicker.InterClickMs());
+            if (NativeMethods.IsIconic(hwnd)) { NativeMethods.ShowWindow(hwnd, 9); Thread.Sleep(200); }
+            var wrect = NativeMethods.GetRect(hwnd);
+            var center = new System.Drawing.Point(wrect.Left + nd.Point.X, wrect.Top + nd.Point.Y);
+            return HumanClicker.ClickBurst(hwnd, center, count);
+        }
+
+        private string OcrRegion(IntPtr hwnd, QuickFlowNode nd)
+        {
+            try
+            {
+                if (NativeMethods.IsIconic(hwnd)) { NativeMethods.ShowWindow(hwnd, 9); Thread.Sleep(250); }
+                return CaptureAndOcrRegion(hwnd, nd.Rect, false);
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() => AppendLog($"快捷操作：OCR 出错 {ex.Message}"));
+                return "";
+            }
+        }
         private async void RunScriptB_Click(object sender, RoutedEventArgs e)
         {
             if (_boundBHwnd == IntPtr.Zero) { AppendLog("请先绑定窗口B"); return; }

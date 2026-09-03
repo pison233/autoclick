@@ -155,7 +155,17 @@ namespace WindowSpy
         /// </summary>
         public static int ClickBurst(IntPtr hwnd, Point center)
         {
-            int n = BurstCount();
+            return DoClickBurst(hwnd, center, BurstCount());
+        }
+
+        /// <summary>按指定次数执行一组点击（次数由流程节点自带时使用）。</summary>
+        public static int ClickBurst(IntPtr hwnd, Point center, int count)
+        {
+            return DoClickBurst(hwnd, center, Math.Max(1, count));
+        }
+
+        private static int DoClickBurst(IntPtr hwnd, Point center, int n)
+        {
             for (int i = 0; i < n; i++)
             {
                 var (dx, dy) = ClickJitter();

@@ -36,11 +36,11 @@
                     <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
                             MouseLeftButtonDown="BindA_MouseLeftButtonDown">
                         <Viewbox Stretch="Uniform">
-                            <Grid>
-                                <Ellipse Width="68" Height="68" Stroke="#FF444444" StrokeThickness="2"/>
-                                <Ellipse Width="40" Height="40" Stroke="#FF444444" StrokeThickness="2"/>
-                                <Ellipse Width="14" Height="14" Fill="#FF444444"/>
-                            </Grid>
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="#FF444444" StrokeThickness="1.7" Fill="Transparent"
+                                      Data="M 2,5 L 2,18 Q 2,20 4,20 L 20,20 Q 22,20 22,18 L 22,5 M 2,9.5 L 22,9.5"/>
+                                <Ellipse Canvas.Left="4.4" Canvas.Top="6.2" Width="1.6" Height="1.6" Fill="#FF444444"/>
+                            </Canvas>
                         </Viewbox>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
@@ -53,11 +53,11 @@
                     <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="#FFE8E8E8" BorderBrush="#FF777777" BorderThickness="1"
                             MouseLeftButtonDown="BindB_MouseLeftButtonDown">
                         <Viewbox Stretch="Uniform">
-                            <Grid>
-                                <Ellipse Width="68" Height="68" Stroke="#FF444444" StrokeThickness="2"/>
-                                <Ellipse Width="40" Height="40" Stroke="#FF444444" StrokeThickness="2"/>
-                                <Ellipse Width="14" Height="14" Fill="#FF444444"/>
-                            </Grid>
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="#FF444444" StrokeThickness="1.7" Fill="Transparent"
+                                      Data="M 2,5 L 2,18 Q 2,20 4,20 L 20,20 Q 22,20 22,18 L 22,5 M 2,9.5 L 22,9.5"/>
+                                <Ellipse Canvas.Left="4.4" Canvas.Top="6.2" Width="1.6" Height="1.6" Fill="#FF444444"/>
+                            </Canvas>
                         </Viewbox>
                     </Border>
                     <DockPanel Margin="10,0,0,0" VerticalAlignment="Center">
